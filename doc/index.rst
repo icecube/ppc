@@ -4,47 +4,30 @@
 Photon Propagation Code (ppc)
 =============================
 
-.. toctree::
-   :maxdepth: 1
-
-   ppc_manual_2010
-   llh_manual_2013
-   release_notes
-
 ppc is a software program that can be used as either a stand-alone command-line executable, or within the IceCube software chain as a module to generate and propagate photons from either in-situ light sources (flasher LEDs, standard candle lasers) or photons emitted or caused by high-energy particles or processes (Cherenkov photons and delayed luminescence).
 
 Files
 -----
 
-- private/ppc
+- gpu/
 
-  - i3ppc.cxx
+  ppc for CPU/CUDA
 
-    ppc module wrapper, compiles into libppc.so
+- ocl/
 
-  - llh/
+  ppc for OpenCL
 
-    llh/DirectFit code (stand-alone only)
+- llh/
 
-  - ocl/
+  llh/DirectFit
 
-    the core of ppc (for OpenCL), compiles into libxppc.so
+- bfr/
 
-  - gpu/
+  birefringence simulation code; simulates diffusion patterns in polycrystalline ice
 
-    the core of ppc (for CUDA), compiles into libxppc.so
+- ice/
 
-  - bfr/
-
-    birefringence simulation code; simulates diffusion patterns in polycrystalline ice
-
-  - ppc.h
-
-    header file for code in ocl/, used by both i3ppc.cxx and llh/.
-
-- resources/ice
-
-  one of the ice models, fully configured for use by module, stand-alone program, or llh/DirectFit.
+  contains selected ice models, configured for use by ppc or llh/DirectFit.
 
 
 Configuration
