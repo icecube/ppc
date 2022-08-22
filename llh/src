@@ -1,0 +1,2 @@
+export I3_PORTS=/cvmfs/icecube.opensciencegrid.org/py2-v3.1.1/RHEL_6_x86_64
+export LD_LIBRARY_PATH=$I3_PORTS/lib:$LD_LIBRARY_PATH
