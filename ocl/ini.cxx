@@ -1300,7 +1300,7 @@ struct ini{
 	else{ cerr << "File icemodel.dat was not found" << endl; exit(1); }
       }
 
-      dh=dp[1]-dp[0];
+      dh=(dp[size-1]-dp[0])/(size-1);
       if(dh<=0){ cerr << "Ice table does not use increasing depth spacing" << endl; exit(1); }
 
       for(int i=0; i<size; i++) if(i>0) if(fabs(dp[i]-dp[i-1]-dh)>dh*XXX){

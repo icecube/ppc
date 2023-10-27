@@ -1075,7 +1075,7 @@ void cascade::runc(map< xkey, vector<hix> > & sim){
   if(oldf){
     if(e<=0) e=ini;
     xppc::sett(n[0], n[1], n[2], id, 0);
-    xppc::addp(x, y, z, t, e, 0);
+    xppc::addp(x, y, z, t, e, 0, 10);
     xppc::eout();
 
     for(xppc::outz::const_iterator i=xppc::hitz.begin(); i!=xppc::hitz.end(); ++i){
@@ -1153,7 +1153,7 @@ void cascade::runc(map< xkey, vector<hix> > & sim){
 	  double rn=step*(j+jmin);
 	  xppc::sett(n[0], n[1], n[2], id, j);
 	  if(e>0) E[j]*=etot/e, T[j]+=E[j];
-	  xppc::addp(x+rn*n[0], y+rn*n[1], z+rn*n[2], t+rn/sol, E[j], mlpd?-1:0);
+	  xppc::addp(x+rn*n[0], y+rn*n[1], z+rn*n[2], t+rn/sol, E[j], mlpd?step:0, 10);
 	}
 	xppc::eout();
 
@@ -1200,7 +1200,7 @@ void cascade::runc(map< xkey, vector<hix> > & sim){
       xppc::sett(n[0], n[1], n[2], id, 0);
       for(int j=0; j<jnum; j++){
 	double rn=step*(j+jmin);
-	xppc::addp(x+rn*n[0], y+rn*n[1], z+rn*n[2], t+rn/sol, e*unfE[j], mlpd?-1:0);
+	xppc::addp(x+rn*n[0], y+rn*n[1], z+rn*n[2], t+rn/sol, e*unfE[j], mlpd?step:0, 10);
       }
       xppc::eout();
 
@@ -1330,7 +1330,7 @@ void cascade::runf(map< xkey, vector<hix> > & sim){
 
 	    xppc::sett(n[0], n[1], n[2], id, j);
 	    if(e>0) E[j]*=etot/e, T[j]+=E[j];
-	    xppc::addp(r[0], r[1], r[2], r[3], E[j]*bunch, char(j<2?0:1));
+	    xppc::addp(r[0], r[1], r[2], r[3], E[j]*bunch, 0, j<2?-1:-2);
 	  }
 	}
 	else{
@@ -1394,7 +1394,7 @@ void cascade::runf(map< xkey, vector<hix> > & sim){
 	  }
 
 	  xppc::sett(n[0], n[1], n[2], id, j);
-	  xppc::addp(r[0], r[1], r[2], r[3], e*unfE[j]*bunch*(ang.flag?srep:1), char(j<2?0:1));
+	  xppc::addp(r[0], r[1], r[2], r[3], e*unfE[j]*bunch*(ang.flag?srep:1), 0, j<2?-1:-2);
 	}
       }
       else{

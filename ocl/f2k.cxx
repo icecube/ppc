@@ -9,24 +9,13 @@ float grnd(){  // gaussian distribution
   return sqrtf(-2*logf(xrnd()))*sinf(2*FPI*xrnd());
 }
 
-static const float rho=0.9216;      // density of ice [mwe]
-static const float m0=0.105658389;  // muon rest mass [GeV]
+static const float rho=0.9216f;      // density of ice [mwe]
+static const float m0=0.105658389f;  // muon rest mass [GeV]
 
 photon p;
 
-#ifdef XLIB
-float yield(float N, char type){  // LED light
-  p.type=type==0?5:6;
-  return q.eff*N;
-}
-#endif
-
-float yield(float E, int type){  // cascades
-  float f=1.0f;
-  float logE=logf(max(m0, type<0?10:E));
-
-  const float Lrad=0.39652*0.910f/rho;
-  const float em=5.321*0.910f/rho;  // 0.910 density used in simulation
+float yield(float E, float dr, int type){
+  float nph=0;
 
   /**
    * a,b describe the longitudinal profile of cascades.
@@ -47,10 +36,10 @@ float yield(float E, int type){  // cascades
    * Reference: icecube/201210001 (for hadrons the values are recalculated)
    * The type are as following:
    * type  particle
-   * 1 standard em (same as e-) is default if no other type is given
-   * 2 e-
-   * 3 e+
-   * 4 gamma
+   * 11 standard em (same as e-) is default if no other type is given
+   * 12 e-
+   * 13 e+
+   * 14 gamma
    * 101 standard hadron (same as pi+)
    * 102 pi+
    * 103 pi-
@@ -62,124 +51,142 @@ float yield(float E, int type){  // cascades
    *     anti_proton parameterization.
    **/
 
-  p.n.w=0, p.f=0;
-
-  if(type>100){
-    float E0, m, f0, rms0, gamma;
-
-    switch(type){
-    default:
-    case 101: // standard hadron (same as pi+)
-    case 102: // pi+
-      p.a=1.58357292f+0.41886807f*logE, p.b=Lrad/0.33833116f;
-      E0=0.18791678f;
-      m =0.16267529f;
-      f0=0.30974123f;
-      rms0 =0.95899551f;
-      gamma=1.35589541f;
-      break;
-
-    case 103: // pi-
-      p.a=1.69176636f+0.40803489f*logE, p.b=Lrad/0.34108075f;
-      E0=0.19826506f;
-      m =0.16218006f;
-      f0=0.31859323f;
-      rms0 =0.94033488f;
-      gamma=1.35070162f;
-      break;
-
-    case 104: // kaon0L
-      p.a=1.95948974f+0.34934666f*logE, p.b=Lrad/0.34535151f;
-      E0=0.21687243f;
-      m =0.16861530f;
-      f0=0.27724987f;
-      rms0 =1.00318874f;
-      gamma=1.37528605f;
-      break;
-
-    case 105: // proton
-      p.a=1.47495778f+0.40450398f*logE, p.b=Lrad/0.35226706f;
-      E0=0.29579368f;
-      m =0.19373018f;
-      f0=0.02455403f;
-      rms0 =1.01619344f;
-      gamma=1.45477346f;
-      break;
-
-    case 106: // neutron
-      p.a=1.57739060f+0.40631102f*logE, p.b=Lrad/0.35269455f;
-      E0=0.66725124f;
-      m =0.19263595f;
-      f0=0.17559033f;
-      rms0 =1.01414337f;
-      gamma=1.45086895f;
-      break;
-
-    case 107: // anti_proton
-      p.a=1.92249171f+0.33701751f*logE, p.b=Lrad/0.34969748f;
-      E0=0.29579368f;
-      m =0.19373018f;
-      f0=0.02455403f;
-      rms0 =1.01094637f;
-      gamma=1.50438415f;
-      break;
-    }
-
-    {
-      float e=max(2.71828183f, E);
-      float F=1-powf(e/E0, -m)*(1-f0);
-      float dF=F*rms0*powf(logf(e), -gamma);
-      do f=F+dF*grnd(); while(f<0 || 1.1<f);
-    }
-  }
-  else if(type<0){
-    p.n.w=7.5f;
-    p.f=0;
-    p.a=0; p.b=0;
+  if(type<0){  // LED light
+    p.type=type==-1?5:6;
+    nph=E;
   }
   else{
-    switch(type){
-    default:
-    case 1:   // em shower
-    case 2:   // e-
-      p.a=2.01849f+0.63176f*logE, p.b=Lrad/0.63207f;
-      break;
+    float logE=logf(max(m0, E));
+    p.n.w=dr;
 
-    case 3:   // e+
-      p.a=2.00035f+0.63190f*logE, p.b=Lrad/0.63008f;
-      break;
+    if(type<10){  // bare muon (0) endpoint (1)
+      float extr=1+max(0.0f, 0.1880f+0.0206f*(logE-type))*0.910f/rho;
+      nph=dr>0?dr*extr:0;
+      p.f=1/extr;
+      p.a=0, p.b=0;
+    }
+    else{  // cascades
+      const float Lrad=0.39652*0.910f/rho;
+      const float em=5.321*0.910f/rho;  // 0.910 density used in simulation
 
-    case 4:   // gamma
-      p.a=2.83923f+0.58209f*logE, p.b=Lrad/0.64526f;
-      break;
+      nph=em*E;
+
+      if(type<100){
+	switch(type){
+	default:
+	case 10:   // em shower
+	case 11:   // delta/brems/epair
+	case 12:   // e-
+	  p.a=2.01849f+0.63176f*logE, p.b=Lrad/0.63207f;
+	  break;
+
+	case 13:   // e+
+	  p.a=2.00035f+0.63190f*logE, p.b=Lrad/0.63008f;
+	  break;
+
+	case 14:   // gamma
+	  p.a=2.83923f+0.58209f*logE, p.b=Lrad/0.64526f;
+	  break;
+	}
+      }
+      else{
+	float E0, m, f0, rms0, gamma;
+
+	switch(type){
+	default:
+	case 101: // standard hadron (same as pi+)
+	case 102: // pi+
+	  p.a=1.58357292f+0.41886807f*logE, p.b=Lrad/0.33833116f;
+	  E0=0.18791678f;
+	  m =0.16267529f;
+	  f0=0.30974123f;
+	  rms0 =0.95899551f;
+	  gamma=1.35589541f;
+	  break;
+
+	case 103: // pi-
+	  p.a=1.69176636f+0.40803489f*logE, p.b=Lrad/0.34108075f;
+	  E0=0.19826506f;
+	  m =0.16218006f;
+	  f0=0.31859323f;
+	  rms0 =0.94033488f;
+	  gamma=1.35070162f;
+	  break;
+
+	case 104: // kaon0L
+	  p.a=1.95948974f+0.34934666f*logE, p.b=Lrad/0.34535151f;
+	  E0=0.21687243f;
+	  m =0.16861530f;
+	  f0=0.27724987f;
+	  rms0 =1.00318874f;
+	  gamma=1.37528605f;
+	  break;
+
+	case 105: // proton
+	  p.a=1.47495778f+0.40450398f*logE, p.b=Lrad/0.35226706f;
+	  E0=0.29579368f;
+	  m =0.19373018f;
+	  f0=0.02455403f;
+	  rms0 =1.01619344f;
+	  gamma=1.45477346f;
+	  break;
+
+	case 106: // neutron
+	  p.a=1.57739060f+0.40631102f*logE, p.b=Lrad/0.35269455f;
+	  E0=0.66725124f;
+	  m =0.19263595f;
+	  f0=0.17559033f;
+	  rms0 =1.01414337f;
+	  gamma=1.45086895f;
+	  break;
+
+	case 107: // anti_proton
+	  p.a=1.92249171f+0.33701751f*logE, p.b=Lrad/0.34969748f;
+	  E0=0.29579368f;
+	  m =0.19373018f;
+	  f0=0.02455403f;
+	  rms0 =1.01094637f;
+	  gamma=1.50438415f;
+	  break;
+	}
+
+	{
+	  float e=max(2.71828183f, E), f;
+	  float F=1-powf(e/E0, -m)*(1-f0);
+	  float dF=F*rms0*powf(logf(e), -gamma);
+	  do f=F+dF*grnd(); while(f<0 || 1.1<f);
+	  nph*=f;
+	}
+      }
+
+      p.f=0;
+      if(dr>0) p.a=0, p.b=0;
     }
   }
 
-  float nph=f*em;
-  return q.eff*nph*E;
-}
-
-float yield(float E, float dr){  // bare muon
-  float logE=logf(max(m0, E));
-  float extr=1+max(0.0f, 0.1880f+0.0206f*logE);
-  float nph=dr>0?dr*extr:0;
-  p.n.w=dr;
-  p.f=1/extr;
-  p.a=0, p.b=0;
   return q.eff*nph;
 }
 
 #ifdef XLIB
 struct mcid:pair<int,unsigned long long>{
   int frame;
+  double t0;
+
+  bool operator< (const mcid & rhs) const {
+    return
+      frame!=rhs.frame ? frame<rhs.frame :
+      first!=rhs.first ? first<rhs.first :
+      second!=rhs.second ? second<rhs.second :
+      t0<rhs.t0;
+  }
 };
 
 struct ihit{
-  ikey omkey;
   mcid track;
-  float time;
-  float dir;
+  ikey omkey;
   int pmt;
+  float dir;
+  float time;
 
   bool operator< (const ihit & rhs) const {
     return
@@ -448,21 +455,17 @@ unsigned long long bnldev(unsigned long long n, double pp){
   return bnl;
 }
 
-template <class T> void addp(float rx, float ry, float rz, float t, float E, T xt, float scale = 1){
-  p.type=0;
+void addp(float rx, float ry, float rz, float t, float E, float dr, int type, float scale = 1){
+  p.type=-type;
   p.r.w=t; p.r.x=rx; p.r.y=ry; p.r.z=rz;
   p.beta=1; p.tau=0;
 
-  unsigned long long num=poidev(scale*yield(E, xt)/ovr);
+  unsigned long long num=poidev(scale*yield(E, dr, type)/ovr);
 
   addh(num);
 }
 
 #ifdef XLIB
-template void addp(float, float, float, float, float, int, float);
-template void addp(float, float, float, float, float, char, float);
-template void addp(float, float, float, float, float, float, float);
-
 void addp_clst(float rx, float ry, float rz, float t, unsigned long long n, float dr, float beta){
   p.type=0;
   p.r.w=t; p.r.x=rx; p.r.y=ry; p.r.z=rz;
@@ -479,7 +482,7 @@ void addp_clst(float rx, float ry, float rz, float t, unsigned long long n, floa
 void addp_mopo(float rx, float ry, float rz, float t, float light, float length, float beta, float tau, float fr){
   p.type=0;
   p.r.w=t; p.r.x=rx; p.r.y=ry; p.r.z=rz;
-  p.n.w=length; p.f=fr; p.a=0; p.b=0;
+  p.n.w=length; p.f=fr; p.a=0, p.b=0;
   p.beta=beta; p.tau=tau;
 
   unsigned long long num=poidev(light*q.eff/ovr);
@@ -502,8 +505,8 @@ void efin(){
   hitz.erase(hitz.begin(), hitz.end());
 }
 
-void sett(float nx, float ny, float nz, pair<int,unsigned long long> id, int frame){
-  mcid ID; ID.first=id.first; ID.second=id.second; ID.frame=frame;
+void sett(float nx, float ny, float nz, pair<int,unsigned long long> id, int frame, double t0 = 0){
+  mcid ID; ID.first=id.first; ID.second=id.second; ID.frame=frame; ID.t0=t0;
   flnz.push_back(ID); finc();
   p.q=flne; p.n.x=nx; p.n.y=ny; p.n.z=nz;
 }
@@ -516,7 +519,7 @@ void f2k(){
   while(getline(cin, in)){
     flnz.push_back(in); finc();
     char name[32];
-    int gens, igen;
+    int gens, igen, type=-1;
     float x, y, z, th, ph, l, E, t;
     const char * str = "TR %d %d %31s %f %f %f %f %f %f %f %f";
 
@@ -524,16 +527,13 @@ void f2k(){
       th=fcv*(180-th); ph=fcv*(ph<180?ph+180:ph-180);
       float costh=cosf(th), sinth=sinf(th), cosph=cosf(ph), sinph=sinf(ph);
       p.q=flne; p.n.x=sinth*cosph; p.n.y=sinth*sinph; p.n.z=costh;
-      if(0==strcmp(name, "amu+") || 0==strcmp(name, "amu-") || 0==strcmp(name, "amu")) addp(x, y, z, t, E, l);
-      else{
-	int type=0;
-	if(0==strcmp(name, "delta") || 0==strcmp(name, "brems") ||
-	   0==strcmp(name, "epair") || 0==strcmp(name, "e")) type=1;
-	else if(0==strcmp(name, "e-")) type=2;
-	else if(0==strcmp(name, "e+")) type=3;
-	else if(0==strcmp(name, "munu") || 0==strcmp(name, "hadr")) type=101;
-	if(type>0) addp(x, y, z, t, E, type);
-      }
+      if(0==strcmp(name, "amu+") || 0==strcmp(name, "amu-") || 0==strcmp(name, "amu")) type=0;
+      else if(0==strcmp(name, "delta") || 0==strcmp(name, "brems") ||
+	      0==strcmp(name, "epair") || 0==strcmp(name, "e")) type=11;
+      else if(0==strcmp(name, "e-")) type=12;
+      else if(0==strcmp(name, "e+")) type=13;
+      else if(0==strcmp(name, "munu") || 0==strcmp(name, "hadr")) type=101;
+      if(type>=0) addp(x, y, z, t, E, l, type);
     }
   }
   eout();

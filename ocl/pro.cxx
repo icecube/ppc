@@ -532,21 +532,33 @@ __kernel void propagate(__private uint num,
 	n=turn(cs, si, n, &s);
       }
       else{
-	if(p.f<xrnd(&s)){ // cascade particle dirctions
+	float cs=w->coschr, si=w->sinchr;
+
+	if(p.f<xrnd(&s)){ // cascade particle directions
 	  const float a=0.39f, b=2.61f;
 	  const float I=1-exp(-b*exp2(a));
 	  float cs=max(1-pow(-log(1-xrnd(&s)*I)/b, 1/a), -1.0f);
 	  float si=sqrt(1-cs*cs); n=turn(cs, si, n, &s);
 	}
-
-	{ // sampling cherenkov cone
-	  float cs=w->coschr, si=w->sinchr;
-	  if(p.beta<1){
-	    float xi=w->coschr/p.beta;
-	    if(xi<=1) cs=xi, si=sqrt(1-xi*xi);
+	else{
+	  float beta=p.beta;
+	  if(p.type<0){ // muon end point; assuming p.beta=1
+	    const float ar=0.26f*0.9216f/0.105658389f;  // a [GeV/mwe] * density [mwe/m] / muon rest mass [GeV]
+	    float dx=ar*(p.n.w-l);
+	    beta=sqrt(dx*(2+dx))/(1+dx);
+	    if(beta>=cs) r.w-=e.ocv*(sqrt(dx*dx+1)-asinh(1/dx)-dx)/ar;
 	  }
-	  n=turn(cs, si, n, &s);
+	  if(beta<1){
+	    float xi=cs/beta;
+	    if(xi<=1){
+	      float sx=sqrt(1-xi*xi);
+	      if(p.type<0) if(sx<xrnd(&s)*si) ofla=-3;
+	      cs=xi, si=sx;
+	    }
+	    else ofla=-2;
+	  }
 	}
+	n=turn(cs, si, n, &s); // sampling cherenkov cone
       }
     }
 

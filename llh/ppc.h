@@ -13,6 +13,15 @@ namespace xppc{
 
   struct mcid:std::pair<int,unsigned long long>{
     int frame;
+    double t0;
+
+    bool operator< (const mcid & rhs) const {
+      return
+	frame!=rhs.frame ? frame<rhs.frame :
+	first!=rhs.first ? first<rhs.first :
+	second!=rhs.second ? second<rhs.second :
+	t0<rhs.t0;
+    }
   };
 
   struct DOM{
@@ -48,11 +57,11 @@ namespace xppc{
   void flshift(float [], float [], float * = NULL);
 
   struct ihit{
-    ikey omkey;
     mcid track;
-    float time;
-    float dir;
+    ikey omkey;
     int pmt;
+    float dir;
+    float time;
 
     bool operator< (const ihit & rhs) const {
       return
@@ -77,8 +86,8 @@ namespace xppc{
 
   void efin();
 
-  void sett(float, float, float, std::pair<int,unsigned long long>, int);
-  template <class T> void addp(float, float, float, float, float, T, float = 1);
+  void sett(float, float, float, std::pair<int,unsigned long long>, int, double = 0);
+  void addp(float, float, float, float, float, float, int, float = 1);
 
   void addp_clst(float, float, float, float, unsigned long long, float, float);
   void addp_mopo(float, float, float, float, float, float, float, float, float);

@@ -24,13 +24,20 @@ namespace xppc{
 
   void initialize(float enh = 1.f){ m.set(); q.eff*=enh; }
 
-  unsigned int pmax, pmxo, pn, pk;
+  unsigned int pmax, pmxo, pn, pk, hquo;
+
+  void setq(){
+    char * HQUO=getenv("HQUO");
+    hquo=HQUO==NULL?1:atoi(HQUO);
+    cerr<<"HQUO(photons/max number of hits)="<<hquo<<endl;
+  }
 
 #ifdef XCPU
   dats *e;  // pointer to a copy of "d" on device
   int nblk, nthr, ntot;
 
   void ini(){
+    setq();
     rs_ini();
     pn=0; pk=0;
 
@@ -38,7 +45,7 @@ namespace xppc{
     pmax=ntot*NPHO;
     pmxo=pmax/OVER;
     pmax=pmxo*OVER;
-    d.hnum=pmax;
+    d.hnum=pmax/hquo;
 
     d.gdev=0; d.gnum=1;
     d.gini=0; d.gspc=pmax; d.gtot=pmax; d.gdiv=1;
@@ -149,12 +156,13 @@ namespace xppc{
 	  pmax=ntot*npho;
 	  pmxo=pmax/OVER;
 	  pmax=pmxo*OVER;
-	  d.hnum=pmax;
+	  d.hnum=pmax/hquo;
 
 	  unsigned long mtot=sizeof(datz)+sizeof(dats)+d.gsize*sizeof(DOM);
 	  mtot+=d.hnum*sizeof(hit);
 	  mtot+=pmxo*sizeof(photon);
 	  mtot+=pmax*sizeof(pbuf);
+
 	  if(mtot>xmem) npho/=2; else break;
 	}
       }
@@ -302,6 +310,8 @@ namespace xppc{
   vector<gpu> gpus;
 
   void ini(){
+    setq();
+
     d.hnum=0; d.gnum=gpus.size();
     pmax=0, pmxo=0, pn=0; pk=0;
 
@@ -477,8 +487,17 @@ int main(int arg_c, char *arg_a[]){
     for(int i=0; i<d.size; i++){
       float z=d.hmin+d.dh*i;
       r.z=z; for(int j=0; j<10; j++) r.z=z+zshift(r); z=r.z;
-      cout<<z<<" "<<w.z[i].abs<<" "<<w.z[i].sca*(1-d.g)<<endl;
+      cout<<z<<" "<<w.z[i].abs<<" "<<w.z[i].sca*(1-d.g)<<" "<<d.az[i].ra*d.sum<<endl;
     }
+  }
+  else if(0==strcmp(arg_a[1], "_")){
+    initialize();
+    float4 r;
+    r.w=0;
+    for(r.x=-750.f; r.x<751.f; r.x+=3.f) for(r.y=-750.f; r.y<751.f; r.y+=3.f) for(float z=-750.f; z<751.f; z+=6.f){
+	  r.z=z; for(int j=0; j<10; j++) r.z=z+zshift(r);
+	  cout<<z<<" "<<r.x<<" "<<r.y<<" "<<(r.z-z)<<endl;
+	}
   }
   else if(arg_c<=2){
     int device=0;
