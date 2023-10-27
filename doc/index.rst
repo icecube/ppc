@@ -82,6 +82,12 @@ these are set as usual within a shell (with an "export" as necessary). Within a 
 
     sets directory where ice and most other configuration files are located. By default uses current directory, ""
 
+  - **NEXTGENDIR**
+
+    *example: PPCTABLESDIR=ice/*
+
+    sets directory where new sensor configuration files (om.conf, om.dirs, om.map, om.wv_*.?) are located. By default uses the value of PPCTABLESDIR
+
   - **ICEMODELDIR**
 
     *example: ICEMODELDIR=ice/*
@@ -130,7 +136,7 @@ these are set as usual within a shell (with an "export" as necessary). Within a 
 
     *example: FWID=9.7*
 
-    sets the width (in degrees) of the 2d gaussian (von-Mieses-Fisher distribution) that determines the light emission profile of flasher LEDs. Set to -1 to simulate isotropcal emission profile. If greater than 999.0, the accurate lab-measured profile is simulated. Additionally if greater than 1050.0, the value is taken as azimuthal direction to cable (in degrees, value of 1080 is azimuthal direction along x axis), which is placed as a perfectly absorbing cylinder of radius of 2.3 cm, touching the DOM outer surface. The cable orientation specified here is used to block photons at the emission point (before starting the propagation through ice; to specify cable near receiving DOMs use configuration file dx.dat (which normally should match the value specified here for the same DOM). Unless negative (-1), also a perfectly absorbing harness belt of width of 6.8 cm is simulated, and only 10% of photons exiting the DOM sphere below the equator are retained.
+    sets the width (in degrees) of the 2d gaussian (von-Mieses-Fisher distribution) that determines the light emission profile of flasher LEDs. Set to -1 to simulate isotropic emission profile. If greater than 999.0, the accurate lab-measured profile is simulated. Additionally if greater than 1050.0, the value is taken as azimuthal direction to cable (in degrees, value of 1080 is azimuthal direction along x axis), which is placed as a perfectly absorbing cylinder of radius of 2.3 cm, touching the DOM outer surface. The cable orientation specified here is used to block photons at the emission point (before starting the propagation through ice; to specify cable near receiving DOMs use configuration file dx.dat (which normally should match the value specified here for the same DOM). Unless negative (-1), also a perfectly absorbing harness belt of width of 6.8 cm is simulated, and only 10% of photons exiting the DOM sphere below the equator are retained.
 
   - **FZCR**
 
@@ -193,6 +199,14 @@ these are set as usual within a shell (with an "export" as necessary). Within a 
     *example: NPHO_2=512*
 
     sets the average number of photons to process in a single thread on a GPU. If underscore syntax is used, the number that follows the underscore sets the GPU for which to apply this setting. Setting this to 0 takes that GPU out of use. Default is 1024.
+
+  - **HQUO**
+
+    *Hits QUOtient*
+
+    *example: HQUO=4*
+
+    reduces memory footprint of the array of photon hits by the given integer number. This may (rarely) cause a buffer overflow and lost hits (with a printed error), if changed from the default value of 1. This appears to be necessary on gpu001 (either because of the A40 GPU or AMD CPU when used with CUDA). Only applies to the CUDA version of ppc.
 
   - **XMLT/XMLT_X**
 
@@ -471,7 +485,7 @@ Configuration files
       2.354436 # p3
       1.680717 # p4
 
-    Blocks other than the first one can be optionally omitted (disabling anisotropy and hole ice parts of the calculation)
+    The block of 12 birefringence parameters p1/p2/p3/p4=A/B/C/D=alpha/beta/gamma/delta is used as described in the New Anisotropy Paper (formulae 1,2) and in Cryosphere (formulae 23,24). See list of references at the end of this page for links to references. Blocks other than the first one can be optionally omitted (disabling anisotropy and hole ice parts of the calculation)
 
   - **cx.dat**
 
@@ -541,6 +555,31 @@ Configuration files
 
     parametrization of the correction to the wavelength acceptance curve to be used for high-QE DOMs. Each line has: wavelength in nm, and correction factor (ratio of high-QE to nominal)
 
+  - **om.conf**
+
+    main OM (Optical Module) configuration file. See example below for explanation.
+
+    ::
+
+       # name  module  area    beta    Rr      Rz      num     dir     cable
+       Default -1      1       0.49    0.1651  0.1651  1       180 0   90
+       DEgg    120     1       0.5     0.150   0.267   2       180 0
+                                                                 0 0
+
+    Area is an overall efficiency scaling parameter for a given sensor type. Parameter beta specifies the angular sensitivity function of a single PMT within any given sensor; values between -1 and 1 specify PMTs with approximately spherical cathodes (including flat with beta=1); values less than -1 (e.g., -2) specify cylindical sensitive area. Parameters Rr and Rz specify extensions of the spheroid that approximates the sensor geometry in the horizontal and vertical directions (spheroid is assumed symmetrical around the z-axis). Num is the number of PMTs within the sensor, and dir specify zenith and azimuth of each PMT. Cable, when specified, is the azimuthal direction to cable in the sensor's coordinate system. The sensor orientation itself is then determined from this number combined with the azimuthal direction to cable as given in file dx.dat.
+
+  - **om.dirs**
+
+    contains a uniformly distributed set of directions on a sphere; needed to calculate normalization factors (maximum sensitivity/projected area and direction-averaged area vs. maximum projected area) of sensors at initialization.
+
+  - **om.map**
+
+    OM (Optical Module) type map, each line contains: String#, OM#, OM type. At the moment all PMTs within the same sensor are assumed to be of same (PMT) type, which is specified as before in file eff-f2k.
+
+  - **om.wv_[om_type].[pmt_type]**
+
+    parametrization of wavelength-tabulated direction-averaged sensor effective area. Each line contains: direction-averaged sensor effective area in cm^2, and wavelength in nm. OM type in filename extension is taken from om.conf and PMT type (all PMTs within the same sensor are at the moment assumed to be of the same type) is taken from file eff-f2k.
+
 - llh/DirectFit additional configuration/input files, to be placed in the "current" directory
 
   - **as**
@@ -596,6 +635,10 @@ Command-line parameters
   - optionally "-" [x] [y]
 
     Print out the table of ice parameters (IceCube coordinate z of the center of the ice layer, absorption coefficient, and effective scattering coefficient) for wavelength w in [nm] (if set with WFLA=[w]) at the IceCube coordinates x and y in [m] (or 0, 0 if not specified). The parameters are computed using formulae of section 4 of the SPICE paper.
+
+  - one parameter "_"
+
+    Print out a table containing ice layer tilt surfaces
 
   - one integer parameter [gpu]
 
@@ -729,15 +772,22 @@ A number of variations of the oversizing geometries and simulation strategies we
 
 Additional feature in the strategy of the oversize implementation is to continue propagating the photon after it hits the DOM. This is disabled when the oversize factor is set to 1, and the photon is stopped and disappears once it hits the surface of the DOM. Such a strategy is thought to be more correct, as in the equivalent nominal-size DOM treatement, while propgating a bunch of 25 photons that would otherwise hit the oversized DOM, only one of them will hit the nominal-size DOM, while 24 will continue unimpeded. This strategy was also included into the timing distribution distortion numbers stated in the previous paragraph.
 
+RDE implementation
+++++++++++++++++++
+
+The file wv.rde (ratio of high-QE to nominal vs. wavelength) will be phased out. New approach taken for the configuration of IceCube extensions is to specify the effective area vs. wavelength for each type of sensor PMT individually.
+
 References:
 -----------
 
 SPICE models
 ++++++++++++
 
-`Measurement of South Pole ice transparency with the IceCube LED calibration system (SPICE Paper): arXiv:1301.5361 <http://icecube.wisc.edu/~dima/work/WISC/ppc/spice/new/paper/a.pdf>`_
+`Optical properties of deep glacial ice at the South Pole (AMANDA ice paper) <https://agupubs.onlinelibrary.wiley.com/doi/full/10.1029/2005JD006687>`_
 
-`Evidence of optical anisotropy of the South Pole ice (Ice Anisotropy Paper): arXiv:1309.7010 (pp. 17-20) <http://icecube.wisc.edu/~dima/work/WISC/papers/2013_ICRC/ice/icrc2013-0580.pdf>`_
+`Measurement of South Pole ice transparency with the IceCube LED calibration system (SPICE Paper): arXiv:1301.5361 <https://icecube.wisc.edu/~dima/work/WISC/ppc/spice/new/paper/a.pdf>`_
+
+`Evidence of optical anisotropy of the South Pole ice (Ice Anisotropy Paper): arXiv:1309.7010 (pp. 17-20) <https://icecube.wisc.edu/~dima/work/WISC/papers/2013_ICRC/ice/icrc2013-0580.pdf>`_
 
 `Light diffusion in birefringent polycrystals and the IceCube ice anisotropy (Birefringence Paper): arXiv:1908.07608 <https://arxiv.org/abs/1908.07608>`_
 
@@ -745,27 +795,29 @@ SPICE models
 
 `A calibration study of local ice and optical sensor properties in IceCube (Hole Ice Paper): arXiv:2107.10435 <https://arxiv.org/abs/2107.10435>`_
 
+`In-situ estimation of ice crystal properties at the South Pole using LED calibration data from the IceCube Neutrino Observatory (Cryosphere) <https://tc.copernicus.org/preprints/tc-2022-174/>`_
+
 llh/DirectFit
 +++++++++++++
 
-`Event reconstruction in IceCube based on direct event re-simulation (DirectFit paper): arXiv:1309.7010 (pp. 21-24) <http://icecube.wisc.edu/~dima/work/WISC/papers/2013_ICRC/dir/icrc2013-0581.pdf>`_
+`Event reconstruction in IceCube based on direct event re-simulation (DirectFit paper): arXiv:1309.7010 (pp. 21-24) <https://icecube.wisc.edu/~dima/work/WISC/papers/2013_ICRC/dir/icrc2013-0581.pdf>`_
 
-`Likelihood description for comparing data with simulation of limited statistics (Likelihood Paper): arXiv:1304.0735 <http://icecube.wisc.edu/~dima/work/WISC/papers/2013/llh/a.pdf>`_
+`Likelihood description for comparing data with simulation of limited statistics (Likelihood Paper): arXiv:1304.0735 <https://icecube.wisc.edu/~dima/work/WISC/papers/2013/llh/a.pdf>`_
 
-`Likelihood description for comparing data to simulation of limited statistics (LLH ICRC Paper) <http://icecube.wisc.edu/~dima/work/WISC/papers/2013_ICRC/llh/icrc2013-0582.pdf>`_
+`Likelihood description for comparing data to simulation of limited statistics (LLH ICRC Paper) <https://icecube.wisc.edu/~dima/work/WISC/papers/2013_ICRC/llh/icrc2013-0582.pdf>`_
 
 PPC
 +++
 
-`Photon tracking with GPUs in IceCube, Nuclear Inst. and Methods in Physics Research, A, Volume 725, pp. 141-143. <http://icecube.wisc.edu/~dima/work/BKP/DCS/VLVNT11/paper/ppc.pdf>`_
+`Photon tracking with GPUs in IceCube, Nuclear Inst. and Methods in Physics Research, A, Volume 725, pp. 141-143. <https://icecube.wisc.edu/~dima/work/BKP/DCS/VLVNT11/paper/ppc.pdf>`_
 
-`Photon Propagation with GPUs in IceCube, Proceedins to GPUHEP2014, DESY-PROC-2014-05, pp. 217-220 <http://icecube.wisc.edu/~dima/work/WISC/new/2014/gpu2014/chirkin_dmitry.pdf>`_
+`Photon Propagation with GPUs in IceCube, Proceedins to GPUHEP2014, DESY-PROC-2014-05, pp. 217-220 <https://icecube.wisc.edu/~dima/work/WISC/new/2014/gpu2014/chirkin_dmitry.pdf>`_
 
 Miscellaneous
 +++++++++++++
 
-`Older ppc information pages on my homepage <http://icecube.wisc.edu/~dima/work/WISC/ppc/>`_ and `readme file <http://icecube.wisc.edu/~dima/work/WISC/ppc/readme.html>`_
+`Older ppc information pages on my homepage <https://icecube.wisc.edu/~dima/work/WISC/ppc/>`_ and `readme file <https://icecube.wisc.edu/~dima/work/WISC/ppc/readme.html>`_
 
 `AMANDA file format definition (used as input for command-line ppc in particle mode) <https://www-zeuthen.desy.de/~steffenp/f2000/>`_
 
-`Muon Monte Carlo (MMC), a java program that can be used to process muons for use with command-line ppc <http://icecube.wisc.edu/~dima/work/MUONPR/>`_
+`Muon Monte Carlo (MMC), a java program that can be used to process muons for use with command-line ppc <https://icecube.wisc.edu/~dima/work/MUONPR/>`_
