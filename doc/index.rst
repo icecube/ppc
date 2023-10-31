@@ -634,7 +634,7 @@ Command-line parameters
   - one parameter "-"
   - optionally "-" [x] [y]
 
-    Print out the table of ice parameters (IceCube coordinate z of the center of the ice layer, absorption coefficient, and effective scattering coefficient) for wavelength w in [nm] (if set with WFLA=[w]) at the IceCube coordinates x and y in [m] (or 0, 0 if not specified). The parameters are computed using formulae of section 4 of the SPICE paper.
+    Print out the table of ice parameters (IceCube coordinate z of the center of the ice layer, absorption coefficient, effective scattering *Mie* coefficient, and 4pi-integrated birefringence *BFR* scattering) for wavelength w in [nm] (if set with WFLA=[w]) at the IceCube coordinates x and y in [m] (or 0, 0 if not specified). The parameters are computed using formulae of section 4 of the SPICE paper.
 
   - one parameter "_"
 
