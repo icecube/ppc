@@ -553,6 +553,10 @@ void f2k(){
 }
 #endif
 
+#if defined(__APPLE_CC__) || defined(__FreeBSD__)
+void sincosf(float x, float * s, float * c){ *s = sin(x); *c = cos(x); }
+#endif
+
 void flone(unsigned long long num){
   addh(num*(q.eff/dppm)/ovr);
 }
@@ -652,10 +656,6 @@ const float * fldir(){
   static float dir[3]= {pfl.n.x, pfl.n.y, pfl.n.z};
   return dir;
 }
-
-#if defined(__APPLE_CC__) || defined(__FreeBSD__)
-void sincosf(float x, float * s, float * c){ *s = sin(x); *c = cos(x); }
-#endif
 
 void flshift(float r[], float n[], float *m = NULL){
   float sft[3]={0};
