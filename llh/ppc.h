@@ -54,6 +54,7 @@ namespace xppc{
 
   void initialize(float);
   const DOM& flset(int, int);
+  const float * fldir();
   void flshift(float [], float [], float * = NULL);
 
   struct ihit{

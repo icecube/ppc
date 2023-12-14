@@ -510,7 +510,7 @@ __global__ void propagate(dats * ed, unsigned int num){
     pbuf f; f.r=r, f.n=n; f.q=j; f.i=niw; f.fla=fla, f.ofla=ofla; e.bf[i]=f;
   }
 #ifndef XCPU
-  __threadfence_block();
+  __syncthreads();
 #endif
 
   int ofla=-1;

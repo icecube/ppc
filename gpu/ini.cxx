@@ -341,6 +341,10 @@ struct hit{
 };
 
 #ifdef XCPU
+struct int4{
+  int x, y, z, w;
+};
+
 struct float2{
   float x, y;
 };
@@ -366,6 +370,8 @@ struct photon{
   float4 r;    // location, time
   float4 n;    // direction, track length
   unsigned int q; // track segment
+  unsigned int num; // number of photons in this bunch
+  int type;    // source type
   float f;     // fraction of light from muon alone (without cascades)
   union{
     struct{
@@ -378,9 +384,8 @@ struct photon{
       float fldr;   // horizontal direction of the flasher led #1
       short fla, ofla;
     };
+    int4 c;  // for quick copy
   };
-  unsigned int num; // number of photons in this bunch
-  int type;    // source type
 };
 
 struct ices{

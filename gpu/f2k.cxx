@@ -12,9 +12,10 @@ float grnd(){  // gaussian distribution
 static const float rho=0.9216f;      // density of ice [mwe]
 static const float m0=0.105658389f;  // muon rest mass [GeV]
 
-photon p;
+photon p, pfl;
 
 float yield(float E, float dr, int type){
+  p.n.w=dr;
   float nph=0;
 
   /**
@@ -52,12 +53,10 @@ float yield(float E, float dr, int type){
    **/
 
   if(type<0){  // LED light
-    p.type=type==-1?5:6;
-    nph=E;
+    nph=E/dppm;
   }
   else{
     float logE=logf(max(m0, E));
-    p.n.w=dr;
 
     if(type<10){  // bare muon (0) endpoint (1)
       float extr=1+max(0.0f, 0.1880f+0.0206f*(logE-type))*0.910f/rho;
@@ -462,12 +461,24 @@ unsigned long long bnldev(unsigned long long n, double pp){
 }
 
 void addp(float rx, float ry, float rz, float t, float E, float dr, int type, float scale = 1){
-  p.type=-type;
-  p.r.w=t; p.r.x=rx; p.r.y=ry; p.r.z=rz;
-  p.beta=1; p.tau=0;
+  p.r.x=rx; p.r.y=ry; p.r.z=rz; p.r.w=t;
+  if(type<0){
+    p.c=pfl.c;
+    switch(type){
+    case -1: p.type=5; break; // linear cone around n
+    case -2: p.type=6; break; // 2d gaussian around n
+    case -3: p.type=pfl.type; p.ka=-1; break; // iso
+    case -4: // flset-configured flasher
+    default:
+      p.type=pfl.type; p.r=pfl.r; p.n=pfl.n;
+    }
+  }
+  else{
+    p.type=-type;
+    p.beta=1; p.tau=0;
+  }
 
   unsigned long long num=poidev(scale*yield(E, dr, type)/ovr);
-
   addh(num);
 }
 
@@ -629,7 +640,15 @@ const DOM& flset(int str, int dom){
     }
   }
 
+  if(p.fldr>=0 && p.fldr<360){
+    float xi=p.fldr*fcv;
+    sincosf(xi, &p.n.y, &p.n.x);
+    sincosf(p.up, &p.n.z, &xi);
+    p.n.x*=xi; p.n.y*=xi;
+  }
+
   p.type=type;
+  pfl=p;
 
   static DOM om;
   for(int m=0; m<3; m++) om.r[m]=r[m];
@@ -637,6 +656,11 @@ const DOM& flset(int str, int dom){
 }
 
 #ifdef XLIB
+const float * fldir(){
+  static float dir[3] = {pfl.n.x, pfl.n.y, pfl.n.z};
+  return dir;
+}
+
 #if defined(__APPLE_CC__) || defined(__FreeBSD__)
 void sincosf(float x, float * s, float * c){ *s = sin(x); *c = cos(x); }
 #endif

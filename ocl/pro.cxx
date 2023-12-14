@@ -32,6 +32,8 @@ typedef struct{
   cl_float4 r;    // location, time
   cl_float4 n;    // direction, track length
   cl_uint q;      // track segment
+  cl_uint num;    // number of photons in this bunch
+  cl_int type;    // source type
   cl_float f;     // fraction of light from muon alone (without cascades)
   union{
     struct{
@@ -44,9 +46,8 @@ typedef struct{
       cl_float fldr;   // horizontal direction of the flasher led #1
       cl_short fla, ofla;
     };
+    cl_int4 c;  // for quick copy
   };
-  cl_uint num;    // number of photons in this bunch
-  cl_int type;    // source type
 } photon;
 
 typedef struct{
@@ -564,7 +565,7 @@ __kernel void propagate(__private uint num,
 
     pbuf f; f.r=r, f.n=n; f.q=j; f.i=niw; f.fla=fla, f.ofla=ofla; bf[i]=f;
   }
-  write_mem_fence(CLK_GLOBAL_MEM_FENCE | CLK_LOCAL_MEM_FENCE);
+  barrier(CLK_GLOBAL_MEM_FENCE);
 
   int ofla=-1;
   for(uint i=idx; i<num; TOT==0 && (i=atomic_add(&e.hidx, get_num_groups(0)))){

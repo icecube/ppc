@@ -31,6 +31,7 @@ bool fast=false;
 bool oldf=true;
 bool mlpd=false;
 bool flasher=false;
+int munf=0;
 int srep=1, drep=1;
 
 int cnum=1;
@@ -628,6 +629,13 @@ float spe(const pair<xppc::ihit, vector<xppc::pout> >& dh, int n = -1, int m = -
   return spe(q);
 }
 
+float delay(){
+  const double width=fdur;
+  double delay=width*xrnd();
+  if(oldf) if(xrnd()<exp(-delay/tau)) delay+=width; // for tau << fdur only!
+  return delay;
+}
+
 struct xyz{
   double x, y, z;
 
@@ -841,8 +849,9 @@ struct cascade : xyz, dir{
 	cascade c;
 	int num=sscanf(in.c_str(), "%lf %lf %lf %lf %lf %lf %lf %lf %lf", &c.x, &c.y, &c.z, &c.th, &c.ph, &c.e, &c.t, &c.s, &c.a);
 	if(num>=5){
-	  c.t-=tshift; c.setn(); * this = c; flag=true;
-	  if(mlpd){
+	  c.t-=tshift; c.setn(); * this = c;
+	  if(!flasher || x!=0 || y!=0 || z!=0) flag=true;
+	  if(mlpd && !flasher){
 	    double dx=COG[0]-x, dy=COG[1]-y, dz=COG[2]-z;
 	    double dot=dx*n[0]+dy*n[1]+dz*n[2];
 	    x+=dot*n[0], y+=dot*n[1], z+=dot*n[2];
@@ -1135,7 +1144,7 @@ void cascade::runc(map< xkey, vector<hix> > & sim){
 	  }
 	}
 
-	double e0=etot/jnum;  // jmin=0, jmax=0, jnum=1; e0=e;
+	double e0=etot/jnum;
 	e=0; for(int j=0; j<jnum; j++) E[j]=e0, T[j]=E[j];
       }
 
@@ -1219,18 +1228,13 @@ bool pass=false;
 
 void cascade::ffit(){
   if(pass && ang.flag){
-    const double width=fdur;
     for(int n=ang.ds.empty()?-1:0; n<(int) ang.ds.size(); n++){
       for(int m=ang.cs.empty()?-1:0; m<(int) ang.cs.size(); m++){
 	map< xkey, vector<hix> > sim;
 	for(xppc::outz::const_iterator i=xppc::hitz.begin(); i!=xppc::hitz.end(); ++i){
 	  const xppc::ihit & h = i->first;
 	  xkey om(make_pair(h.omkey.str, h.omkey.dom), h.pmt);
-
-	  double delay=width*xrnd();
-	  if(oldf) if(xrnd()<exp(-delay/tau)) delay+=width; // for tau << fdur only!
-
-	  sim[om].push_back(hix(t+h.time+delay, spe(*i, n, m), h.dir));
+	  sim[om].push_back(hix(t+h.time+delay(), spe(*i, n, m), h.dir));
 	}
 
 	for(map< xkey, vector<hix> >::const_iterator i=sim.begin(); i!=sim.end(); ++i){
@@ -1261,7 +1265,7 @@ void cascade::ffit(){
 }
 
 void cascade::runf(map< xkey, vector<hix> > & sim){
-  const double ini=5, emax=100, bunch=2.5e9, width=fdur;
+  const double ini=5, emax=100, bunch=2.5e9;
 
   if(oldf){
     if(e<=0) e=ini;
@@ -1272,9 +1276,7 @@ void cascade::runf(map< xkey, vector<hix> > & sim){
     for(xppc::outz::const_iterator i=xppc::hitz.begin(); i!=xppc::hitz.end(); ++i){
       const xppc::ihit & h = i->first;
       xkey om(make_pair(h.omkey.str, h.omkey.dom), h.pmt);
-      double delay=width*xrnd();
-      if(xrnd()<exp(-delay/tau)) delay+=width; // for tau << fdur only!
-      sim[om].push_back(hix(t+h.time+delay, spe(*i), h.dir));
+      sim[om].push_back(hix(t+h.time+delay(), spe(*i), h.dir));
     }
 
     xppc::efin();
@@ -1282,11 +1284,30 @@ void cascade::runf(map< xkey, vector<hix> > & sim){
   else{
     pair<int, unsigned long long> id=make_pair(0, 0);
 
-    const double etot=ini*srep;  // total number of photon bunches
-    const double step=5.;   // distance between directions [degrees]
-    int jmin=-2, jnum=2+360/step;  // number of angular bins
+    const double etot = (e>0 && munf>=10 ? e : ini) * srep;  // total number of photon bunches
+    const double step = 5.;  // angular distance between LED beam directions [degrees]
+    int j0, j1, j2, jnum;  // angular bins
 
-    if(!mlpd) jmin=0, jnum=1;
+    /*  munf:
+	0:1 component (mlpd=false)
+	1:2+72 down/up+72 5-deg bins
+	2:2+1 (down/up+led)
+	3:2+1 (back/forward+led)
+	4:1+1 (isotropic+led)
+	+10:take e from file "ini", otherwise ini=5
+    */
+
+    switch(munf%10){
+    case 1:  j0=2, j1=-1, j2=-2; jnum=j0+360/step; // (2 linear components + 5-deg bins)
+      break;
+    case 2:
+    case 3:  j0=2, j1=-1, j2=-4; jnum=j0+1; // (2 linear components + LED beam)
+      break;
+    case 4:  j0=1, j1=-3, j2=-4; jnum=j0+1; // (1 isotrop component + LED beam)
+      break;
+    case 0:
+    default: j0=0, j1=-4, j2=-4; jnum=j0+1; // one flset-defined beam
+    }
 
     if(unfE.empty()){
       double D[ndof], Q[nchn], E[jnum], X[jnum], T[jnum];
@@ -1303,7 +1324,7 @@ void cascade::runf(map< xkey, vector<hix> > & sim){
 	  }
 	}
 
-	double e0=etot/jnum;  // jmin=0, jmax=0, jnum=1; e0=e;
+	double e0=etot/jnum;
 	e=0; for(int j=0; j<jnum; j++) E[j]=e0, T[j]=E[j];
       }
 
@@ -1318,19 +1339,22 @@ void cascade::runf(map< xkey, vector<hix> > & sim){
 	  for(int J=0; J<jnum; J++){
 	    int j=qx[J];
 
-	    float n[3], r[4]={(float) x, (float) y, (float) z, 0.f};
-	    if(j<2){
+	    float n[3], r[3]={(float) x, (float) y, (float) z};
+	    if(j1==-1 && j<j0){
 	      // n[0]=0, n[1]=0, n[2]=2*j-1;
 	      for(int i=0; i<3; i++) n[i]=(2*j-1)*fln[i];
 	    }
-	    else{
-	      sincosf(cv*step*(j+jmin), &n[1], &n[0]); n[2]=0;
+	    else if(j2==-2){
+	      sincosf(cv*step*(j-j0), &n[1], &n[0]); n[2]=0;
 	      xppc::flshift(r, n, fln);
+	    }
+	    else{
+	      n[0]=0, n[1]=0, n[2]=0;
 	    }
 
 	    xppc::sett(n[0], n[1], n[2], id, j);
 	    if(e>0) E[j]*=etot/e, T[j]+=E[j];
-	    xppc::addp(r[0], r[1], r[2], r[3], E[j]*bunch, 0, j<2?-1:-2);
+	    xppc::addp(r[0], r[1], r[2], 0.f, E[j]*bunch, 0.f, j<j0?j1:j2);
 	  }
 	}
 	else{
@@ -1346,7 +1370,7 @@ void cascade::runf(map< xkey, vector<hix> > & sim){
 	  const xppc::ihit & h = i->first;
 	  xkey om(make_pair(h.omkey.str, h.omkey.dom), h.pmt);
 	  if(isok(om)){
-	    hit tq(t+h.time+width*xrnd(), spe(*i));
+	    hit tq(t+h.time+delay(), spe(*i));
 	    sto[h.track.frame].push_back(make_pair(om, tq));
 	    if(l>0 && !fast){
 	      map<xkey, dat>::iterator i=all.find(om);
@@ -1383,18 +1407,21 @@ void cascade::runf(map< xkey, vector<hix> > & sim){
     {
       if(mlpd){
 	for(int j=0; j<jnum; j++){
-	  float n[3], r[4]={(float) x, (float) y, (float) z, 0.f};
-	  if(j<2){
+	  float n[3], r[3]={(float) x, (float) y, (float) z};
+	  if(j1==-1 && j<j0){
 	    // n[0]=0, n[1]=0, n[2]=2*j-1;
 	    for(int i=0; i<3; i++) n[i]=(2*j-1)*fln[i];
 	  }
-	  else{
-	    sincosf(cv*step*(j+jmin), &n[1], &n[0]); n[2]=0;
+	  else if(j2==-2){
+	    sincosf(cv*step*(j-j0), &n[1], &n[0]); n[2]=0;
 	    xppc::flshift(r, n, fln);
+	  }
+	  else{
+	    n[0]=0, n[1]=0, n[2]=0;
 	  }
 
 	  xppc::sett(n[0], n[1], n[2], id, j);
-	  xppc::addp(r[0], r[1], r[2], r[3], e*unfE[j]*bunch*(ang.flag?srep:1), 0, j<2?-1:-2);
+	  xppc::addp(r[0], r[1], r[2], 0.f, e*unfE[j]*bunch*(ang.flag?srep:1), 0.f, j<j0?j1:j2);
 	}
       }
       else{
@@ -1409,7 +1436,7 @@ void cascade::runf(map< xkey, vector<hix> > & sim){
       for(xppc::outz::const_iterator i=xppc::hitz.begin(); i!=xppc::hitz.end(); ++i){
 	const xppc::ihit & h = i->first;
 	xkey om(make_pair(h.omkey.str, h.omkey.dom), h.pmt);
-	sim[om].push_back(hix(t+h.time+width*xrnd(), spe(*i), h.dir));
+	sim[om].push_back(hix(t+h.time+delay(), spe(*i), h.dir));
       }
 
       xppc::efin();
@@ -2150,8 +2177,8 @@ int main(int arg_c, char *arg_a[]){
   {
     char * bmp=getenv("MLPD");
     if(bmp!=NULL){
-      if(*bmp==0 || atoi(bmp)<0) oldf=true, mlpd=false;
-      else oldf=false, mlpd=atoi(bmp)>0;
+      if(*bmp==0 || atoi(bmp)<0) oldf=true, munf=0;
+      else oldf=false, munf=atoi(bmp); mlpd=munf>0;
     }
     cerr<<"Running in a "<<(oldf?"compatibility":mlpd?"millipede":"cascade")<<" mode!"<<endl;
   }
@@ -2204,6 +2231,12 @@ int main(int arg_c, char *arg_a[]){
   cerr<<"Initialized!"<<endl;
 
   if(flasher && mlpd){
+    if(munf%10==3){
+      const float * dir = xppc::fldir();
+      for(int i=0; i<3; i++) fln[i]=dir[i];
+      cerr<<"LED direction at "<<fln[0]<<" "<<fln[1]<<" "<<fln[2]<<endl;
+    }
+
     char * bmp=getenv("FLOR");
     if(bmp!=NULL && !(*bmp!=0 && atoi(bmp)==0)){
       xppc::ikey om; om.str=abs(fla.first), om.dom=fla.second;
