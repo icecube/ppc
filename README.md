@@ -15,3 +15,6 @@ photon propagation code (ppc) and selected IceCube ice models
    spice_bfr-v2: South Pole ICE based on BireFRingence with absorption anisotropy model
 
 - doc: [documentation](doc/index.rst)
+
+
+<a href="https://zenodo.org/doi/10.5281/zenodo.10410725"><img src="https://zenodo.org/badge/527689072.svg" alt="DOI"></a>
