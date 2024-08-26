@@ -84,7 +84,7 @@ these are set as usual within a shell (with an "export" as necessary). Within a 
 
   - **NEXTGENDIR**
 
-    *example: PPCTABLESDIR=ice/*
+    *example: NEXTGENDIR=ice/*
 
     sets directory where new sensor configuration files (om.conf, om.dirs, om.map, om.wv_*.?) are located. By default uses the value of PPCTABLESDIR
 
@@ -105,6 +105,14 @@ these are set as usual within a shell (with an "export" as necessary). Within a 
     *example: PPCHOLEICE=ice/as.dat*
 
     sets the angular sensitivity file. By default is set to "PPCTABLESDIR/as.dat"
+
+  - **FLWL**
+
+    *FLasher WaveLength*
+
+    *example: FLWL=400*
+
+    overrides the extension of the wv.dat file (containing the wavelength sampling curve). So, in this example the wavelength sampling curve is read in from file wv.400
 
   - **WFLA**
 
@@ -300,13 +308,31 @@ these are set as usual within a shell (with an "export" as necessary). Within a 
 
     1: only use time-integrated charges during simultaneous t0 (start time) and energy unfolding steps. This was shown to produce more stable result, although occasionally somewhat worse llh values. 0: use time-binned charges in parts of the calculation when optimizing t0 and unfolding energy/flasher brightness. Default is 0
 
+  - **UNFM**
+
+    *UNFolding Method*
+
+    *use: UNFM=0/1*
+
+    1: Use slower (but more precise) minimizer (using golden ratio algorithm) for t0 search. Default is 0
+
   - **MLPD**
 
     *MiLliPeDe*
 
     *use: MLPD=0/1*
 
-    short for millipede. Enables/disables pattern unfolding: loss profile along the track (0 to reconstruct as a cascade, 1 to reconstruct as a track), or azimuthal flasher light emission profile (1 to enable unfolding into 2 up/down components and 72 azimuthal components spaced out 5 degrees apart; or 0 to use emission profile determined by the FLDR setting)
+    short for millipede. Enables/disables pattern unfolding: loss profile along the track (0 to reconstruct as a cascade, 1 to reconstruct as a track), or azimuthal flasher light emission profile (1 to enable unfolding into 2 up/down components and 72 azimuthal components spaced out 5 degrees apart; or 0 to use emission profile determined by the FLDR setting). Flasher unfolding has additional options. Below is a full list (+10 options, i.e., 10, 11, 12, 13, and 14 are usually x10 faster for the unfolding stages as most LEDs are seeded with brightness expressed in "number of photon bunches" of e=0.5 from the "ini" file). MLPD=-1 is a "legacy" option, thas is even faster and slightly less precise than MLPD=0 (cascades) or MLPD=10 (flashers).
+
+    ::
+
+       -1:  1 component
+       0:   1 component
+       1:   2+72 down/up+72 5-deg bins
+       2:   2+1 (down/up+led)
+       3:   2+1 (back/forward+led)
+       4:   1+1 (isotropic+led)
+       +10: take e from file "ini", otherwise ini=5
 
   - **FLSH**
 
@@ -604,15 +630,23 @@ Configuration files
 
   - **bad**
 
-    contains String#, OM# of DOMs that are to be considered bad in the fit. If this file is found the DOMs in it are excluded from the fit, and the no-hit contribution to the log likelihood sum is taken into account
+    contains String#, OM# of DOMs that are to be considered bad in the fit. If this file is found the DOMs in it are excluded from the fit, and the no-hit contribution to the log likelihood sum is taken into account.
 
   - **ert**
 
-    contains String#, OM#, ti, tf that define the "DOM errata" list containing time intervals of bad data, which are not to be used. May define more than one interval [ti; tf) for each DOM
+    contains String#, OM#, ti, tf that define the "DOM errata" list containing time intervals of bad data, which are not to be used. May define more than one interval [ti; tf) for each DOM.
+
+  - **set**
+
+    contains String#, OM# of the "good DOM list". When present and read, only uses DOMs that are on this list.
 
   - **dat**
 
     main data file. Each line contains: String#, OM#, time in ns, and average charge in p.e.s. The data is internally rebinned in 25 ns bins before applying the bayesian deblocking method to merge bins. If an event spans over more than 5000 ns then to avoid resizing the fixed 200 bin internal buffers the bin size is increased. It is recommended to trim events to keep then at 5000 ns or less in length but throwing away late pulses and coinsident events before or after the main event. Coincident events should be cleaned away anyway with, e.g., topological trigger. Longer events such as muons crossing the entire detector should of course not be shortened just to fit into 5000 ns, but only to remove afterpulses and coincident events.
+
+  - **sim**
+
+    Uses the same format as the "dat" file above. Overrides the binned charge values while re-using the binning calculated/optimized for the "dat" file. This is useful for re-simulations of the data, where it might be desired to keep the same binning as used for the actual data.
 
   - **ini**
 
@@ -639,6 +673,20 @@ Command-line parameters
   - one parameter "_"
 
     Print out a table containing ice layer tilt surfaces
+
+  - one parameter "="
+
+    expects x, y, z of a point in IceCube coordinates. Outputs the input string appended by z-shift (due to tilt) to and local ice layer width (nominally 10 m but can vary if using VTHK=1) at the x,y position of the nominal ice given by the icemodel.dat table. This is used to compile the table matching DOMs to ice layers:
+
+    ::
+
+       #!/bin/sh
+
+       ppc=ppc
+       ice=ices/spice_ftp-v3
+
+       awk 'BEGIN {zoff=1948.07} $6>0 && $7<=60 {print $3, $4, $5+zoff, $6, $7}' geo-f2k | PPCTABLESDIR=$ice $ppc = |
+       awk 'BEGIN {zoff=1948.07; low=zoff-2798.47} {z=$3-$6; n=1+int((z-low)/10+0.5); print $4, $5, n}' > strx-ftp
 
   - one integer parameter [gpu]
 
@@ -671,7 +719,7 @@ Command-line parameters
         }
         print "TEND ? ? ?"
         print "END"
-     }
+      }
 
 
   - 4 parameters: [str] [dom] [num] [gpu]
