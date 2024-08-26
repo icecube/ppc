@@ -369,7 +369,7 @@ void addh(unsigned long long num){
   if(pn>0 && pk==0) q.pz[pk++]=p;
 }
 
-double gammln(double xx){
+double gammln(double xx){  // gamma function
   static const double stp = 2.5066282746310005;
   static const double cof[6] = {76.18009172947146, -86.50532032941677, 24.01409824083091,
 			  -1.231739572450155, 0.1208650973866179e-2, -0.5395239384953e-5};
@@ -385,7 +385,7 @@ double gammln(double xx){
   return -tmp+log(stp*ser);
 }
 
-unsigned long long poidev(double xm){
+unsigned long long poidev(double xm){  // sample Poisson distribution with mean xm
   double sq, alxm, g, t, y;
   unsigned long long um;
 
@@ -417,7 +417,7 @@ unsigned long long poidev(double xm){
   return um;
 }
 
-unsigned long long bnldev(unsigned long long n, double pp){
+unsigned long long bnldev(unsigned long long n, double pp){  // down-sample with binomial distribution
   unsigned long long j, bnl;
   double am, em, g, angle, p, sq, t, y;
   double pc, plog, pclog, en, oldg;
@@ -660,10 +660,6 @@ const float * fldir(){
   static float dir[3] = {pfl.n.x, pfl.n.y, pfl.n.z};
   return dir;
 }
-
-#if defined(__APPLE_CC__) || defined(__FreeBSD__)
-void sincosf(float x, float * s, float * c){ *s = sin(x); *c = cos(x); }
-#endif
 
 void flshift(float r[], float n[], float *m = NULL){
   float sft[3]={0};

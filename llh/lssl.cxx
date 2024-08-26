@@ -234,7 +234,7 @@ namespace LSSL{
   }
 
   double wref(double * A, double * D, double * V, double * S, int N, int M, double trs = 0, double *as = NULL, double xmin = 0, double xmax = 1, double *XA = NULL, double *XS = NULL){
-    n=N; m=0;
+    n=N; m=0; d=D; s=S;
     bool R[M];
     double stot=0, dtot=0;
     for(int i=0; i<M; i++){
@@ -249,7 +249,7 @@ namespace LSSL{
     for(int j=0; j<N; j++) dtot+=D[j];
     double Xfl=dtot/stot;
 
-    double X[m]; a = new double[n*m]; c = new double[m]; d=D; s=S;
+    double X[m]; a = new double[n*m]; c = new double[m];
     if(XA!=NULL) xa = new double[m]; else xa = NULL;
     if(XS!=NULL) xs = new double[m]; else xs = NULL;
 

@@ -30,6 +30,7 @@ bool fail=false;
 bool fast=false;
 bool oldf=true;
 bool mlpd=false;
+bool unfm=true;
 bool flasher=false;
 int munf=0;
 int srep=1, drep=1;
@@ -424,7 +425,7 @@ typedef struct{
     return true;
   }
 
-  vector<hit> draw, sraw;
+  vector<hit> draw, sraw, praw;
   double dbin[num], sbin[num], dtot, stot, qtot;
 
   int n1, n2, ntop;
@@ -462,6 +463,23 @@ typedef struct{
     }
 
     optimize();
+  }
+
+  void pfill(){
+    for(int k=n1; k<n2; k++) dbin[k]=0; dtot=0;
+    for(vector<hit>::const_iterator j=praw.begin(); j!=praw.end(); ++j) if(isok(j->t)){
+	double t=floor((j->t-t0)/lbin), q=j->q;
+	if(cutz) if(t<=0 || t>=num-2) q=0;
+	if(t<n1) t=n1; else if(t>=n2) t=n2-1;
+	dbin[int(t)]+=q; dtot+=q;
+      }
+
+    int f=ntop-1, fnum=0;
+    for(int k=lastchange[f]; ; k=lastchange[k-1]){
+      double d=0;
+      for(; f>=k; f--) d+=dtop[f];
+      dat[fnum++]=d; if(k==0) break;
+    }
   }
 
   void fill(double dt){
@@ -581,9 +599,17 @@ typedef struct{
   bool in(){
     return qtot<qsat*drep && qtot>qmin*drep && (!flasher || dom.first!=abs(fla.first) || abs(dom.second-fla.second)>fsep);
   }
+
+  bool good(){
+    return unfm || ert.empty();
+  }
 } dat;
 
-set<key> bad;
+set<key> bad, good;
+bool isgood(const key & om){
+  return good.empty() || good.find(om)!=good.end();
+}
+
 bool isok(const key & om){
   return bad.find(om)==bad.end();
 }
@@ -647,6 +673,16 @@ struct xyz{
 
   void ini(){
     {
+      FILE * f = fopen("set", "r");
+      if(f){
+	int str, dom;
+	while(fscanf(f, "%d %d", &str, &dom)==2) good.insert(make_pair(str, dom));
+	fclose(f);
+	cerr<<"Good DOM list read; only using DOMs from this list"<<endl;
+      }
+    }
+
+    {
       FILE * f = fopen("bad", "r");
       if(f){
 	int str, dom;
@@ -682,10 +718,13 @@ struct xyz{
 	  xkey om(make_pair(str, dom), pmt);
 	  xppc::ikey ik; ik.str=str; ik.dom=dom;
 	  if(ik.isinice() && isok(om)){
-	    if(std::isnan(t0) || t<t0) t0=t;
-	    if(std::isnan(tx) || t>tx) tx=t;
-	    q=qint(q*drep);
-	    if(q>0) all[om].draw.push_back(hit(t, q));
+	    if(isgood(om)){
+	      if(std::isnan(t0) || t<t0) t0=t;
+	      if(std::isnan(tx) || t>tx) tx=t;
+	      q=qint(q*drep);
+	      if(q>0) all[om].draw.push_back(hit(t, q));
+	    }
+	    else bad.insert(om);
 	  }
 	}
 	fclose(f);
@@ -699,7 +738,7 @@ struct xyz{
       tshift=t0-dt; nchn=1, ndof=1;
       for(map<xkey, dat>::iterator i=all.begin(); i!=all.end(); ++i){
 	dat & d = i->second; d.dom=i->first;
-	d.prep(tshift); if(d.in()) nchn++, ndof+=d.fnum;
+	d.prep(tshift); if(d.in()){ if(d.good()) nchn++; ndof+=d.fnum; }
       }
 
       unsigned int nhit=0;
@@ -727,6 +766,28 @@ struct xyz{
       nsq=nsrt*lbin*drep;
       for(vector<double>::iterator i=noise.begin(); i!=noise.end(); ++i) *i*=nsq;
       for(vector<double>::iterator i=noise_q.begin(); i!=noise_q.end(); ++i) *i*=nsq;
+    }
+
+    {
+      FILE * f = fopen("sim", "r");
+      if(f){
+	int str, dom, pmt=0;
+	double t, q;
+	while(xppc::nextgen ?
+	      fscanf(f, "%d %d_%d %lf %lf", &str, &dom, &pmt, &t, &q)==5 :
+	      fscanf(f, "%d %d %lf %lf", &str, &dom, &t, &q)==4){
+	  xkey om(make_pair(str, dom), pmt);
+	  xppc::ikey ik; ik.str=str; ik.dom=dom;
+	  if(ik.isinice() && isok(om)){
+	    q=qint(q*drep);
+	    if(q>0) all[om].praw.push_back(hit(t, q));
+	  }
+	}
+	fclose(f);
+
+	for(map<xkey, dat>::iterator i=all.begin(); i!=all.end(); ++i) i->second.pfill();
+	cerr<<"sim sub ";
+      }
     }
 
     {
@@ -927,7 +988,7 @@ struct cascade : xyz, dir{
   }
 
   void unfold(double[], double[], vector< pair<xkey, hit> >[], int);
-  void unfold_t(double[], double[], vector< pair<xkey, hit> >[], int, double);
+  void unfold_t(double[], double[], vector< pair<xkey, hit> >[], int, double &);
 
   void runc(map< xkey, vector<hix> > &);
   void runf(map< xkey, vector<hix> > &);
@@ -982,7 +1043,7 @@ void cascade::unfold(double Q[], double X[], vector< pair<xkey, hit> > sto[], in
       A[n+++m*nchn]=nohit;
       for(map<xkey, dat>::iterator i=all.begin(); i!=all.end(); ++i){
 	dat & d=i->second;
-	if(d.in()){
+	if(d.in() && d.good()){
 	  d.fill(0);
 	  double q=0;
 	  for(int k=0; k<d.fnum; k++) q+=d.sim[k];
@@ -1001,21 +1062,25 @@ void cascade::unfold(double Q[], double X[], vector< pair<xkey, hit> > sto[], in
   delete A;
 }
 
-void cascade::unfold_t(double D[], double X[], vector< pair<xkey, hit> > sto[], int jnum, double dt=0){
-  bool time=false, same=false, done=false;
-  double * A = new double[ndof*jnum]();
-  double del=4*lbin, low=lbin/25, best=NAN;
-  double sdt=dt;
+void cascade::unfold_t(double D[], double X[], vector< pair<xkey, hit> > sto[], int jnum, double & dt){
+  const double gr=(1+sqrt(5.))/2;
+  double del=4*lbin, low=lbin/25;
+  double tl=dt, tc=dt, th=dt, tn=dt;
+  double fl=0., fc=0., fh=0., fn=0.;
+  double * A = new double[jnum*ndof];
 
-  while(true){
+  bool mid=false;
+  for(int count=0; ; count++){
     for(int m=0; m<jnum; m++){
-      vector< pair<xkey, hit> > & s = sto[m];
-      for(vector< pair<xkey, hit> >::iterator h=s.begin(); h!=s.end(); ++h){
-	const hit& tq = h->second;
-	double t=tq.t, q=tq.q;
-	map<xkey, dat>::iterator i=all.find(h->first);
-	if(i==all.end()){ if(unh) nohit+=q; }
-	else i->second.sraw.push_back(hit(t, q));
+      if(sto!=NULL){
+	vector< pair<xkey, hit> > & s = sto[m];
+	for(vector< pair<xkey, hit> >::iterator h=s.begin(); h!=s.end(); ++h){
+	  const hit& tq = h->second;
+	  double t=tq.t, q=tq.q;
+	  map<xkey, dat>::iterator i=all.find(h->first);
+	  if(i==all.end()){ if(unh) nohit+=q; }
+	  else i->second.sraw.push_back(hit(t, q));
+	}
       }
       {
 	int n=0;
@@ -1023,58 +1088,88 @@ void cascade::unfold_t(double D[], double X[], vector< pair<xkey, hit> > sto[], 
 	for(map<xkey, dat>::iterator i=all.begin(); i!=all.end(); ++i){
 	  dat & d=i->second;
 	  if(d.in()){
-	    d.fill(dt);
+	    d.fill(tn);
 	    for(int k=0; k<d.fnum; k++) A[n+++m*ndof]=d.sim[k];
 	  }
 	}
-	end();
       }
+      if(sto!=NULL) end();
     }
 
-    if(time){
-      double rnorm=NNLS::nnls(A, D, X, ndof, jnum);
-      // double rnorm=NNLS::nsum(A, D, X, ndof, jnum);
-      // double rnorm=LSSL::wref(A, D, X, noise.data(), ndof, jnum, -2);
-      // double rnorm=LSSL::wllh(A, D, X, noise.data(), ndof, jnum);
-      // cout<<dt<<" "<<rnorm<<" "<<del<<endl;
+    {
+      // NNLS::nnls(A, D, X, ndof, jnum);
+      LSSL::wref(A, D, X, noise.data(), ndof, jnum, -2);
+      if(unfm) break;
 
-      if(done) break;
+      fn=0;
+      for(int n=0; n<ndof; n++){
+	double sim=noise.data()[n];
+	for(int m=0; m<jnum; m++) sim+=A[n+m*ndof]*X[m];
+	fn+=dat::llf(sim*srep/drep, D[n], srep, drep);
+      }
+      fn/=ndof;
+    }
 
-      if(std::isnan(best)) best=rnorm;
-      else{
-	if(fabs(del)<low){
-	  if(rnorm<best){
-	    best=rnorm;
-	    break;
-	  }
-	  else{
-	    del=sdt-dt;
-	    done=true;
-	  }
+    // cerr<<mid<<" "<<del<<"  "<<tl<<" "<<tc<<" "<<th<<" "<<tn<<"  "<<fl<<" "<<fc<<" "<<fh<<" "<<fn<<endl;
+
+    if(mid){
+      if(th-tl<low) break;
+
+      if(th-tc>tc-tl){
+	if(fn<fc){
+	  tl=tc, fl=fc;
+	  tc=tn, fc=fn;
 	}
 	else{
-	  if(rnorm<best){
-	    best=rnorm; sdt=dt;
-	    if(same) del*=2; else same=true;
-	  }
-	  else{
-	    dt-=del; del/=-2;
-	    if(same){ del/=2; same=false; }
-	  }
+	  th=tn, fh=fn;
 	}
       }
-      dt+=del;
+      else{
+	if(fn<fc){
+	  th=tc, fh=fc;
+	  tc=tn, fc=fn;
+	}
+	else{
+	  tl=tn, fl=fn;
+	}
+      }
+      tn=th-tc+tl;
     }
-    else break;
+    else{
+      switch(count){
+      case 0:
+	tc=tn, fc=fn;
+	tn+=del;
+	break;
+      case 1:
+	th=tn, fh=fn;
+	tn=fh<fc?th+del:tl-del;
+	break;
+      default:
+	if(tn>th){
+	  tl=tc, fl=fc;
+	  tc=th, fc=fh;
+	  th=tn, fh=fn;
+	  if(fh<fc) tn+=del;
+	  else mid=true;
+	}
+	else{
+	  if(count>2){
+	    th=tc, fh=fc;
+	    tc=tl, fc=fl;
+	  }
+	  tl=tn, fl=fn;
+	  if(fl<fc) tn-=del;
+	  else mid=true;
+	}
+      }
+      if(mid) tn=th-tc+tl;
+      else del*=gr;
+    }
   }
 
-  {
-    // NNLS::nnls(A, D, X, ndof, jnum);
-    LSSL::wref(A, D, X, noise.data(), ndof, jnum, -2);
-  }
-
+  dt=tn;
   delete A;
-  if(time) t+=dt;
 }
 
 void cascade::runc(map< xkey, vector<hix> > & sim){
@@ -1140,7 +1235,7 @@ void cascade::runc(map< xkey, vector<hix> > & sim){
 	  if(d.in()){
 	    double q=0;
 	    for(int k=0; k<d.fnum; k++) D[n++]=d.dat[k], q+=d.dat[k];
-	    Q[m++]=q;
+	    if(d.good()) Q[m++]=q;
 	  }
 	}
 
@@ -1173,7 +1268,7 @@ void cascade::runc(map< xkey, vector<hix> > & sim){
 	  if(isok(om)){
 	    hit tq(h.time, spe(*i));
 	    sto[h.track.frame].push_back(make_pair(om, tq));
-	    if(l>0 && !fast){
+	    if(unfm && l>0 && !fast){
 	      map<xkey, dat>::iterator i=all.find(om);
 	      if(i==all.end()){ if(unh) nohit+=tq.q; }
 	      else i->second.sraw.push_back(tq);
@@ -1183,14 +1278,20 @@ void cascade::runc(map< xkey, vector<hix> > & sim){
 	}
 	xppc::efin();
 
-	if(qsim>0){
-	  double t=0, e=1;
-	  double llh=optte(t, e);
-	  end();
-	  dt=t;
-	  unfold_t(D, X, sto, jnum, t);
+	if(unfm){
+	  if(qsim>0){
+	    double t=0, e=1;
+	    double llh=optte(t, e);
+	    end();
+	    dt=t;
+	    unfold_t(D, X, sto, jnum, t);
+	  }
+	  else unfold(Q, X, sto, jnum);
 	}
-	else unfold(Q, X, sto, jnum);
+	else{
+	  if(fast || l==0) unfold(Q, X, sto, jnum);
+	  else unfold_t(D, X, sto, jnum, dt);
+	}
 
 	e=0; for(int j=0; j<jnum; j++) E[j]=T[j]*X[j]/drep, e+=E[j];
 	// cout<<"E:"; for(int j=0; j<jnum; j++) cout<<" "<<E[j]; cout<<endl;
@@ -1320,7 +1421,7 @@ void cascade::runf(map< xkey, vector<hix> > & sim){
 	  if(d.in()){
 	    double q=0;
 	    for(int k=0; k<d.fnum; k++) D[n++]=d.dat[k], q+=d.dat[k];
-	    Q[m++]=q;
+	    if(d.good()) Q[m++]=q;
 	  }
 	}
 
@@ -1372,7 +1473,7 @@ void cascade::runf(map< xkey, vector<hix> > & sim){
 	  if(isok(om)){
 	    hit tq(t+h.time+delay(), spe(*i));
 	    sto[h.track.frame].push_back(make_pair(om, tq));
-	    if(l>0 && !fast){
+	    if(unfm && l>0 && !fast){
 	      map<xkey, dat>::iterator i=all.find(om);
 	      if(i==all.end()){ if(unh) nohit+=tq.q; }
 	      else i->second.sraw.push_back(tq);
@@ -1382,14 +1483,20 @@ void cascade::runf(map< xkey, vector<hix> > & sim){
 	}
 	xppc::efin();
 
-	if(qsim>0){
-	  double t=0, e=1;
-	  double llh=optte(t, e);
-	  end();
-	  dt=t;
-	  unfold_t(D, X, sto, jnum, t);
+	if(unfm){
+	  if(qsim>0){
+	    double t=0, e=1;
+	    double llh=optte(t, e);
+	    end();
+	    dt=t;
+	    unfold_t(D, X, sto, jnum, t);
+	  }
+	  else unfold(Q, X, sto, jnum);
 	}
-	else unfold(Q, X, sto, jnum);
+	else{
+	  if(fast || l==0) unfold(Q, X, sto, jnum);
+	  else unfold_t(D, X, sto, jnum, dt);
+	}
 
 	e=0; for(int j=0; j<jnum; j++) E[j]=T[j]*X[j]/drep, e+=E[j];
 	// cout<<"E:"; for(int j=0; j<jnum; j++) cout<<" "<<E[j]; cout<<endl;
@@ -1556,62 +1663,82 @@ double cascade::optte(double &t, double &e){
       cout<<"LLH="<<llh<<" DT="<<d<<endl;
     }
     else{
-    bool verbose=false;
+      if(unfm){
+	bool verbose=false;
 
-    const int num=2;
-    double xi[num]={0, 1}, ei[num]={100, 1};
+	const int num=2;
+	double xi[num]={0, 1}, ei[num]={100, 1};
 
-    gsl_vector * x = gsl_vector_alloc(num);
-    gsl_vector * u = gsl_vector_alloc(num);
+	gsl_vector * x = gsl_vector_alloc(num);
+	gsl_vector * u = gsl_vector_alloc(num);
 
-    for(int i=0; i<num; i++) gsl_vector_set(x, i, xi[i]), gsl_vector_set(u, i, ei[i]);
+	for(int i=0; i<num; i++) gsl_vector_set(x, i, xi[i]), gsl_vector_set(u, i, ei[i]);
 
-    gsl_multimin_function F;
-    F.n = num;
-    F.f = fllh;
-    F.params = NULL;
+	gsl_multimin_function F;
+	F.n = num;
+	F.f = fllh;
+	F.params = NULL;
 
-    const gsl_multimin_fminimizer_type * T = gsl_multimin_fminimizer_nmsimplex;
-    gsl_multimin_fminimizer * s = gsl_multimin_fminimizer_alloc(T, num);
-    gsl_multimin_fminimizer_set(s, &F, x, u);
+	const gsl_multimin_fminimizer_type * T = gsl_multimin_fminimizer_nmsimplex;
+	gsl_multimin_fminimizer * s = gsl_multimin_fminimizer_alloc(T, num);
+	gsl_multimin_fminimizer_set(s, &F, x, u);
 
-    int iter=0, max_iter=200;
+	int iter=0, max_iter=200;
 
-    for(; iter<max_iter; iter++){
-      if(GSL_SUCCESS!=gsl_multimin_fminimizer_iterate(s)){
-	if(verbose) printf("Failed to iterate\n");
-	break;
+	for(; iter<max_iter; iter++){
+	  if(GSL_SUCCESS!=gsl_multimin_fminimizer_iterate(s)){
+	    if(verbose) printf("Failed to iterate\n");
+	    break;
+	  }
+
+	  double size=gsl_multimin_fminimizer_size(s);
+	  if(verbose){
+	    cout<<iter<<" "<<s->fval<<" "<<size;
+	    for(int i=0; i<num; i++) cout<<" "<<gsl_vector_get(s->x, i); cout<<endl;
+	  }
+
+	  if(GSL_SUCCESS==gsl_multimin_test_size(size, 0.001)){
+	    if(verbose) printf("Converged!\n");
+	    break;
+	  }
+	}
+
+	double dt=gsl_vector_get(s->x, 0), nsim=exp(gsl_vector_get(s->x, 1));
+	if(mlpd){
+	  const double nmax=100;
+	  if(nsim*nmax<1 || nsim>nmax){
+	    cerr<<"Warning: fitted nsim="<<nsim<<"!"<<endl;
+	    if(fail) exit(2);
+	    nsim=nsim<1?1/nmax:nmax;
+	  }
+	}
+	t+=dt; e/=nsim; llh=fllh(dt, srep);
+	if(verbose) cout<<"fval="<<s->fval<<" "<<llh<<" "<<fllh(0, srep)<<endl;
+	cout<<"LLH="<<llh<<" DT="<<dt<<" NS="<<nsim<<endl;
+
+	gsl_multimin_fminimizer_free(s);
+	gsl_vector_free(u);
+	gsl_vector_free(x);
       }
+      else{
+	const int jnum=1;
+	double D[ndof], X[jnum], dt=0;
 
-      double size=gsl_multimin_fminimizer_size(s);
-      if(verbose){
-	cout<<iter<<" "<<s->fval<<" "<<size;
-	for(int i=0; i<num; i++) cout<<" "<<gsl_vector_get(s->x, i); cout<<endl;
-      }
+	int n=0;
+	D[n++]=0;
+	for(map<xkey, dat>::iterator i=all.begin(); i!=all.end(); ++i){
+	  dat & d=i->second;
+	  if(d.in()) for(int k=0; k<d.fnum; k++) D[n++]=d.dat[k];
+	}
 
-      if(GSL_SUCCESS==gsl_multimin_test_size(size, 0.001)){
-	if(verbose) printf("Converged!\n");
-	break;
+	unfold_t(D, X, NULL, jnum, dt);
+	double nsim=drep/(srep*X[0]);
+	t+=dt; e/=nsim;
+
+	double llh=fllh(dt, srep);
+	cout<<"LLH="<<llh<<" DT="<<dt<<" NS="<<nsim<<endl;
       }
     }
-
-    double dt=gsl_vector_get(s->x, 0), nsim=exp(gsl_vector_get(s->x, 1));
-    if(mlpd){
-      const double nmax=100;
-      if(nsim*nmax<1 || nsim>nmax){
-	cerr<<"Warning: fitted nsim="<<nsim<<"!"<<endl;
-	if(fail) exit(2);
-	nsim=nsim<1?1/nmax:nmax;
-      }
-    }
-    t+=dt; e/=nsim; llh=fllh(dt, srep);
-    if(verbose) cout<<"fval="<<s->fval<<" "<<llh<<" "<<fllh(0, srep)<<endl;
-    cout<<"LLH="<<llh<<" DT="<<dt<<" NS="<<nsim<<endl;
-
-    gsl_multimin_fminimizer_free(s);
-    gsl_vector_free(u);
-    gsl_vector_free(x);
-  }
   }
   else llh=fllh(0, srep);
   return llh;
@@ -2181,6 +2308,11 @@ int main(int arg_c, char *arg_a[]){
       else oldf=false, munf=atoi(bmp); mlpd=munf>0;
     }
     cerr<<"Running in a "<<(oldf?"compatibility":mlpd?"millipede":"cascade")<<" mode!"<<endl;
+  }
+  {
+    char * bmp=getenv("UNFM");
+    if(bmp!=NULL && !(*bmp!=0 && atoi(bmp)==0)) unfm=false;
+    cerr<<"Using the "<<(unfm?"old (faster)":"new (more precise)")<<" unfolding method!"<<endl;
   }
   {
     char * bmp=getenv("FLSH");

@@ -1,4 +1,5 @@
 #ifdef XCPU
+#define __host__
 #define __device__
 #define __global__
 
@@ -41,10 +42,6 @@ struct BlockDim{
 } blockDim;
 
 unsigned int seed=0;
-
-#if defined(__APPLE_CC__) || defined(__FreeBSD__)
-void sincosf(float x, float * s, float * c){ *s = sin(x); *c = cos(x); }
-#endif
 #endif
 
 __device__ float xrnd(uint4 & s){
@@ -158,70 +155,39 @@ __device__ void rotate(float & cs, float & si, float4 & n, uint4 & s){
 #ifndef XCPU
 __host__ __device__ int __float2int_rd(float x);
 __host__ int __float2int_rd(float x){ return (int)floorf(x); }
-__host__
 #endif
 
-__device__ float square(float x){
+__host__ __device__ float square(float x){
   return x*x;
 }
 
-#ifndef XCPU
-__host__
-#endif
-
-__device__ int findcol(dats & d, int x, int y){
+__host__ __device__ int findcol(dats & d, int x, int y){
   return x>=0 && x<d.mnum[0] && y>=0 && y<d.mnum[1] ? d.mcol[x][y] : -1;
 }
 
-#ifndef XCPU
-__host__
-#endif
-
-__device__ float midp(float2 q, float z){
-  return q.x+q.y*z;
-}
-
-#ifndef XCPU
-__host__
-#endif
-
-__device__ float interpolate(dats & d, int j, float nr, float z){
-  int i=j-1, k=min(max(__float2int_rd(z), 0), d.lpts);
-  datz & p = * d.z;
-  return ( midp(p.lp[j][k], z-k)*(nr-d.lr[i]) +
-	   midp(p.lp[i][k], z-k)*(d.lr[j]-nr) )/(d.lr[j]-d.lr[i]);
-}
-
-#ifndef XCPU
-__host__
-#endif
-
-__device__ float interpolate(dats & d, int3 & c, float3 & w, float z){
-  int k=min(max(__float2int_rd(z), 0), d.lpts);
-  datz & p = * d.z;
-  return
-    ( c.x<0?0: midp(p.lp[c.x][k], z-k)*w.x )+
-    ( c.y<0?0: midp(p.lp[c.y][k], z-k)*w.y )+
-    ( c.z<0?0: midp(p.lp[c.z][k], z-k)*w.z );
-}
-
-#ifndef XCPU
-__host__
-#endif
-
-__device__ float zshift(dats & d, float4 & r, int sign, float & dz){
+__host__ __device__ float zshift(dats & d, float4 & r, float & dz){
   if(d.tmod==1){
     float nr=d.lnx*r.x+d.lny*r.y-d.r0;
     int j=1; for(; j<LMAX; j++) if(nr<d.lr[j] || j==d.lnum-1) break;
 
-    float z1=(r.z-d.lmin)*d.lrdz;
-    float r1=interpolate(d, j, nr, z1);
-    if(sign!=0){
-      float z2=z1+sign*dz*d.lrdz;
-      float r2=interpolate(d, j, nr, z2);
-      dz /= 1-sign*(r2-r1)/ dz;
-    }
-    return r1;
+    float z=(r.z-d.lmin)*d.lrdz;
+    int i=j-1, k=min(max(__float2int_rd(z), 0), d.lpts);
+
+    datz & p = * d.z;
+    float2 pi=p.lp[i][k], pj=p.lp[j][k];
+
+    float2 w, q;
+    float dw = d.lr[j]-d.lr[i];
+
+    w.x = (nr-d.lr[i])/dw;
+    w.y = (d.lr[j]-nr)/dw;
+
+    q.x = pj.x*w.x + pi.x*w.y;
+    q.y = pj.y*w.x + pi.y*w.y;
+
+    float r = q.x + q.y*(z-k);
+    if(d.vthk!=0) dz /= 1 - d.lrdz * q.y;
+    return r;
   }
   else if(d.tmod==2){
     float2 q; // ctr(d, r, q);
@@ -272,22 +238,27 @@ __device__ float zshift(dats & d, float4 & r, int sign, float & dz){
     }
 
     int3 c;
-    c.x=findcol(d, qn.x, qn.y);
-    c.y=findcol(d, qnx, qny);
-    c.z=findcol(d, qn.x+1, qn.y+1);
+    c.x = findcol(d, qn.x, qn.y);
+    c.y = findcol(d, qnx, qny);
+    c.z = findcol(d, qn.x+1, qn.y+1);
 
     float3 w;
     w.x=1-qrx, w.y=qrx-qry, w.z=qry;
 
-    float z1=(r.z-d.lmin)*d.lrdz;
-    float r1=interpolate(d, c, w, z1);
-    if(sign!=0){
-      float z2=z1+sign*dz*d.lrdz;
-      float r2=interpolate(d, c, w, z2);
-      dz /= 1-sign*(r2-r1)/ dz;
-    }
+    float z=(r.z-d.lmin)*d.lrdz;
+    int k=min(max(__float2int_rd(z), 0), d.lpts);
 
-    return r1;
+    datz & p = * d.z;
+    float2 px=p.lp[c.x][k], py=p.lp[c.y][k], pz=p.lp[c.z][k];
+
+    q.x=0, q.y=0;
+    if(c.x>=0) q.x+=px.x*w.x, q.y+=px.y*w.x;
+    if(c.y>=0) q.x+=py.x*w.y, q.y+=py.y*w.y;
+    if(c.z>=0) q.x+=pz.x*w.z, q.y+=pz.y*w.z;
+
+    float r = q.x + q.y*(z-k);
+    if(d.vthk!=0) dz /= 1 - d.lrdz * q.y;
+    return r;
   }
   else return 0;
 }
@@ -536,7 +507,7 @@ __global__ void propagate(dats * ed, unsigned int num){
     float anz=sign*n.z;
 
     float edh = e.dh;
-    float z = r.z - zshift(e, r, e.vthk==0?0:sign, edh); // tilt correction
+    float z = r.z - zshift(e, r, edh); // tilt correction
 
     float nr=1.f;
     int I, J;
@@ -709,7 +680,7 @@ __global__ void propagate(dats * ed, unsigned int num){
       { // get overburden for distance
 	float xs=0, xa=0;
 
-	float y=z+n.z*fin*e.rdh;
+	float y=z+n.z*fin/edh;
 	J=min(max(__float2int_rn(y), 0), e.size-1);
 
 	if(I==J) xs=fin*w->z[I].sca, xa=fin*w->z[I].abs;
@@ -792,7 +763,7 @@ __global__ void propagate(dats * ed, unsigned int num){
 	{ // get overburden for distance
 	  if(I==J) ra=fin*e.az[I].ra, rb=fin*e.az[I].rb;
 	  else{
-	    float y=z+n.z*fin*e.rdh;
+	    float y=z+n.z*fin/edh;
 	    float h=0.5f-sign*(z-I);
 	    float g=0.5f+sign*(y-J);
 	    ra=h*e.az[I].ra+g*e.az[J].ra;
