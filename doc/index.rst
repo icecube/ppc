@@ -833,9 +833,9 @@ SPICE models
 
 `Optical properties of deep glacial ice at the South Pole (AMANDA ice paper) <https://agupubs.onlinelibrary.wiley.com/doi/full/10.1029/2005JD006687>`_
 
-`Measurement of South Pole ice transparency with the IceCube LED calibration system (SPICE Paper): arXiv:1301.5361 <https://icecube.wisc.edu/~dima/work/WISC/ppc/spice/new/paper/a.pdf>`_
+`Measurement of South Pole ice transparency with the IceCube LED calibration system (SPICE Paper): arXiv:1301.5361 <https://arxiv.org/abs/1301.5361>`_
 
-`Evidence of optical anisotropy of the South Pole ice (Ice Anisotropy Paper): arXiv:1309.7010 (pp. 17-20) <https://icecube.wisc.edu/~dima/work/WISC/papers/2013_ICRC/ice/icrc2013-0580.pdf>`_
+`Evidence of optical anisotropy of the South Pole ice (Ice Anisotropy Paper): arXiv:1309.7010 (pp. 17-20) <https://arxiv.org/abs/1309.7010>`_
 
 `Light diffusion in birefringent polycrystals and the IceCube ice anisotropy (Birefringence Paper): arXiv:1908.07608 <https://arxiv.org/abs/1908.07608>`_
 
@@ -845,21 +845,25 @@ SPICE models
 
 `In-situ estimation of ice crystal properties at the South Pole using LED calibration data from the IceCube Neutrino Observatory (Cryosphere) <https://tc.copernicus.org/preprints/tc-2022-174/>`_
 
+`A model independent parametrization of the optical properties of the refrozen IceCube drill holes <https://arxiv.org/abs/2307.15298>`_
+
+`An improved mapping of ice layer undulations for the IceCube Neutrino Observatory <https://arxiv.org/abs/2307.13951>`_
+
 llh/DirectFit
 +++++++++++++
 
-`Event reconstruction in IceCube based on direct event re-simulation (DirectFit paper): arXiv:1309.7010 (pp. 21-24) <https://icecube.wisc.edu/~dima/work/WISC/papers/2013_ICRC/dir/icrc2013-0581.pdf>`_
+`Event reconstruction in IceCube based on direct event re-simulation (DirectFit paper): arXiv:1309.7010 (pp. 21-24) <https://arxiv.org/abs/1309.7010>`_
 
-`Likelihood description for comparing data with simulation of limited statistics (Likelihood Paper): arXiv:1304.0735 <https://icecube.wisc.edu/~dima/work/WISC/papers/2013/llh/a.pdf>`_
+`Likelihood description for comparing data with simulation of limited statistics (Likelihood Paper): arXiv:1304.0735 <https://arxiv.org/abs/1304.0735>`_
 
-`Likelihood description for comparing data to simulation of limited statistics (LLH ICRC Paper) <https://icecube.wisc.edu/~dima/work/WISC/papers/2013_ICRC/llh/icrc2013-0582.pdf>`_
+`Likelihood description for comparing data to simulation of limited statistics (LLH ICRC Paper) <https://inspirehep.net/literature/1413017>`_
 
 PPC
 +++
 
-`Photon tracking with GPUs in IceCube, Nuclear Inst. and Methods in Physics Research, A, Volume 725, pp. 141-143. <https://icecube.wisc.edu/~dima/work/BKP/DCS/VLVNT11/paper/ppc.pdf>`_
+`Photon tracking with GPUs in IceCube, Nuclear Inst. and Methods in Physics Research, A, Volume 725, pp. 141-143. <https://www.sciencedirect.com/science/article/pii/S0168900212015173>`_
 
-`Photon Propagation with GPUs in IceCube, Proceedins to GPUHEP2014, DESY-PROC-2014-05, pp. 217-220 <https://icecube.wisc.edu/~dima/work/WISC/new/2014/gpu2014/chirkin_dmitry.pdf>`_
+`Photon Propagation with GPUs in IceCube, Proceedins to GPUHEP2014, DESY-PROC-2014-05, pp. 217-220 <https://inspirehep.net/literature/1386642>`_
 
 Miscellaneous
 +++++++++++++
