@@ -11,6 +11,10 @@ namespace xppc{
 
   void flone(unsigned long long);
 
+  size_t getMaxBunchSize();
+  size_t getWorkgroupSize();
+  float getTotalDeviceTime();
+
   struct mcid:std::pair<int,unsigned long long>{
     int frame;
     double t0;
@@ -42,6 +46,20 @@ namespace xppc{
 
     bool operator!= (const ikey & rhs) const {
       return str != rhs.str || dom != rhs.dom;
+    }
+  };
+
+  struct xgeo{
+    int num;
+    int type;
+    float r[3];
+    float hv, rde;
+
+    xgeo(){
+      num=0;
+      for(int i=0; i<3; i++) r[i]=0;
+      hv=NAN;
+      rde=NAN;
     }
   };
 

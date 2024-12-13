@@ -377,6 +377,14 @@ float2 ctr(__local dats * d, float2 r){
   return (float2)(d->cb[0][0]*r.x+d->cb[1][0]*r.y, d->cb[0][1]*r.x+d->cb[1][1]*r.y);
 }
 
+#ifdef DTMN
+#define XINC i+=e.hidx
+#define XIDX get_global_size(0)
+#else
+#define XINC i=atomic_add(&e.hidx, get_num_groups(0))
+#define XIDX get_global_size(0)+get_group_id(0)
+#endif
+
 __kernel void propagate(__private uint num,
 			__global dats * ed,
 			__global datz * ez,
@@ -401,7 +409,7 @@ __kernel void propagate(__private uint num,
   {
     event_t ev=async_work_group_copy((__local char *) &e, (__global char *) ed, sizeof(e), 0);
     wait_group_events(1, &ev);
-    if(get_local_id(0)==0) e.hidx=get_global_size(0)+get_group_id(0);
+    if(get_local_id(0)==0) e.hidx=XIDX;
     barrier(CLK_LOCAL_MEM_FENCE);
   }
 
@@ -563,7 +571,7 @@ __kernel void propagate(__private uint num,
   barrier(CLK_GLOBAL_MEM_FENCE);
 
   int ofla=-1;
-  for(uint i=idx; i<num; TOT==0 && (i=atomic_add(&e.hidx, get_num_groups(0)))){
+  for(uint i=idx; i<num; TOT==0 && (XINC)){
     int om=-1;
     if(TOT==0){ // initialize photon
       pbuf f=bf[i];

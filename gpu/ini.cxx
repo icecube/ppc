@@ -25,6 +25,7 @@
 #define MAXGEO 16384 // maximum number of OMs
 #define MAXRND 131072 // max. number of random number multipliers
 
+// #define DTMN
 #define XXX 1.e-5f
 #define FPI 3.141592653589793f
 #define OMR 0.16510f  // DOM radius [m]
@@ -35,6 +36,8 @@ static const float dppm=2450.08;     // photons per meter for nominal IceCube DO
 static const float fcv=FPI/180.f;
 
 static unsigned int ovr=1;
+
+float xrnd();
 
 struct DOM{
   float R, F;
@@ -280,46 +283,25 @@ struct irde{
   }
 
   float binf(float p){
-    int i, j=0; while(sum[++j]<p); i=j-1;
+    int i, j=0; while(sum[++j]<=0); j--; while(sum[++j]<p); i=j-1;
     return i + (sum[j]>sum[i] ? (p-sum[i])/(sum[j]-sum[i]) : 0);
-  }
-
-  float blo, bhi;
-
-  float v(const vector<float> & x, int i){
-    return i<0 ? x[0]-blo : i<(int) x.size() ? x[i] : x[x.size()-1]+bhi;
-  }
-
-  float vlo(const vector<float> & x, int i){
-    return (v(x, i-1)+v(x, i))/2;
-  }
-
-  float vhi(const vector<float> & x, int i){
-    return (v(x, i)+v(x, i+1))/2;
-  }
-
-  float u(const vector<float> & x, int i){
-    return i>=0 && i<(int) x.size() ? x[i] : 0;
   }
 
   void read(const vector<float> & qw, const vector<float> & qf, float blo = -1.f, float bhi = -1.f){
     dat.clear();
 
-    int n=qw.size();
-    this->blo=blo<0?qw[1]-qw[0]:blo;
-    this->bhi=bhi<0?qw[n-1]-qw[n-2]:bhi;
+    int k=0, n=qw.size();
+    float wlo=qw[0]-(blo<0?qw[1]-qw[0]:blo);
+    float whi=qw[n-1]+(bhi<0?qw[n-1]-qw[n-2]:bhi);
+    float w1=wlo, w2=qw[0], f1=0, f2=qf[0];
 
-    int ki=0, kf;
-    float wi=wmin, wf;
-    for(int i=0; i<num; i++){
-      wf=wi+bin;
-      float sum=0;
-      for(kf=ki; kf<n; kf++){
-	sum+=u(qf,kf)*max(0.f, min(wf,vhi(qw, kf))-max(wi,vlo(qw, kf)));
-	if(vhi(qw, kf)>wf) break;
+    for(float w=wmin+bin/2; w<wmax; w+=bin){
+      while(qw[k]<w && k<n){
+	w1=w2, f1=f2; k++;
+	if(k<n) w2=qw[k], f2=qf[k];
+	else w2=whi, f2=0;
       }
-      dat.push_back(sum/bin);
-      wi=wf; ki=kf;
+      dat.push_back(wlo<w && w<whi ? (f1*(w2-w)+f2*(w-w1))/(w2-w1) : 0);
     }
   }
 };
@@ -490,7 +472,13 @@ struct dats{
 struct doms{
   DOM oms[MAXGEO];
   name names[MAXGEO];
-  float wvs[WNUM];
+  struct{
+    float w, i, f;
+
+    float x(){
+      return i+(f-i)*xrnd();
+    }
+  } wvs [WNUM];
 
   hit * hits;
   photon * pz;
@@ -549,7 +537,11 @@ struct ini{
     {
       char * env = getenv("PPCTABLESDIR");
       if(env!=NULL) ppcdir=string(env)+"/";
-      cerr<<"Configuring in \""<<ppcdir<<"\""<<endl;
+      else{
+	env = getenv("I3_SRC");
+	if(env!=NULL) ppcdir=string(env)+"/ppc/resources/ice/";
+      }
+      cerr<<"Configuring ppc in \""<<ppcdir<<"\""<<endl;
     }
 
     string omdir("");
@@ -749,8 +741,10 @@ struct ini{
 
       cerr<<"Loaded "<<size<<" random multipliers"<<endl;
 
+#ifndef DTMN
       timeval tv; gettimeofday(&tv, NULL);
       sv=1000000*(unsigned long long)tv.tv_sec+tv.tv_usec;
+#endif
 
       d.rsize=size;
       for(int i=0; i<size; i++) z.rm[i]=rx[i];
@@ -1381,7 +1375,7 @@ struct ini{
 	      float qv=wx[i], wv=wy[i];
 	      float bin=wv-wo;
 	      float wva=wv-bin/2;
-	      float val=dppm*doma*omav*(qv-qo)/(bin*cherenkov(wva));
+	      float val=dppm*doma*omav*(qv-qo)/bin;
 	      qw.push_back(wva);
 	      qf.push_back(val);
 	      if(rdef) qz.push_back(val*(wz[i]+wz[i-1])/2);
@@ -1411,7 +1405,7 @@ struct ini{
 	    float w, f, u=0;
 	    while(inFile>>w>>f){
 	      if(f<0 || (num>0 && w<=u)){ flag=false; break; }
-	      qf.push_back(f); qw.push_back(w);
+	      qf.push_back(f*cherenkov(w)); qw.push_back(w);
 	      u=w; num++;
 	    }
 	    if(qf.size()<2) flag=false;
@@ -1429,11 +1423,11 @@ struct ini{
 	float sum=0;
 	int k=0;
 	for(float w=env.wmin+env.bin/2; w<env.wmax; w+=env.bin, k++){
-	  float val=0, bin=env.bin*cherenkov(w);
+	  float val=0;
 	  for(map<pair<int,int>, irde>::iterator i=irdes.begin(); i!=irdes.end(); ++i){
 	    irde & mt = i->second;
 	    if(!mt.dat.empty()){
-	      float ri=mt.dat[k]*types[i->first.first].rde*mt.rmax*bin;
+	      float ri=mt.dat[k]*types[i->first.first].rde*mt.rmax*env.bin;
 	      mt.rde+=ri; mt.sum.push_back(mt.rde); mt.dat[k]=ri;
 	      if(val<ri) val=ri;
 	    }
@@ -1564,13 +1558,14 @@ struct ini{
       }
 
       for(int n=0; n<WNUM; n++){
-	float wva=env.wav(env.binf((n+0.5f)/WNUM));
-
 	float wvi=env.binf((n+0.f)/WNUM);
 	int mi=min(max((int) floor(wvi), 0), env.num-1);
 
 	float wvf=env.binf((n+1.f)/WNUM);
 	int mf=min(max((int) floor(wvf), 0), env.num-1);
+
+	float wva=env.wav(env.binf((n+0.5f)/WNUM));
+	q.wvs[n].w=wva; q.wvs[n].i=env.wav(wvi), q.wvs[n].f=env.wav(wvf);
 
 	for(map<pair<int,int>, irde>::iterator i=irdes.begin(); i!=irdes.end(); ++i){
 	  irde & mt = i->second;
@@ -1608,7 +1603,7 @@ struct ini{
 	float wv4=wv*wv3;
 	float np=1.55749-1.57988*wv+3.99993*wv2-4.68271*wv3+2.09354*wv4;
 	float ng=np*(1+0.227106-0.954648*wv+1.42568*wv2-0.711832*wv3);
-	float c=0.299792458; d.ocv=1/c; w.wvl=n; q.wvs[n]=wva; w.ocm=ng/c;
+	float c=0.299792458; d.ocv=1/c; w.wvl=n; w.ocm=ng/c;
 	w.coschr=1/np; w.sinchr=sqrt(1-w.coschr*w.coschr);
       }
     }

@@ -1,11 +1,42 @@
+#define LMAX 80      // number of dust loggers
+#define LYRS 172     // number of depth points
+
+#define CTX  11
+#define CTY  10
+#define DIR1 9.3f
+#define DIR2 129.3f
+
+#define CX   21
+#define CY   19
+#define NSTR 240
+
+#define OVER 128     // minimum number of photons per particle (optimized)
+#define NTOT 1024
+#define NPHO 1024  // maximum number of photons propagated by one thread
+
+#define WNUM   512   // number of wavelength slices
+#define MAXLYS 172   // maximum number of ice layers
+#define MAXGEO 16384 // maximum number of OMs
+#define MAXRND 131072 // max. number of random number multipliers
+
+// #define DTMN
+#define XXX 1.e-5f
+#define FPI 3.141592653589793f
+#define OMR 0.16510f  // DOM radius [m]
+
 static const float doma=FPI*OMR*OMR; // DOM cross-sectional area [m^2]
 static const float omav=0.335822;    // average DOM angular (lab) sensitivity
 static const float dppm=2450.08;     // photons per meter for nominal IceCube DOM
 static const float fcv=FPI/180.f;
 
+static unsigned int ovr=1;
+
 float xrnd();
 
-static unsigned int ovr=1;
+struct DOM{
+  float R, F;
+  float r[3];
+};
 
 struct ikey{
   int str, dom;
@@ -279,8 +310,141 @@ map<ikey, pair<float, int> > rdes;
 map<ikey, V<3> > cx;
 map<ikey, float > dx;
 
-dats d;
-datz z;
+struct hit{
+  unsigned int i, n, z;
+  float t;
+  float pth, pph, dth, dph;
+};
+
+#ifdef XCPU
+struct int4{
+  int x, y, z, w;
+};
+
+struct float2{
+  float x, y;
+};
+
+struct float3:float2{
+  float z;
+};
+
+struct float4:float3{
+  float w;
+};
+#endif
+
+struct pbuf{
+  float4 r;        // location, time
+  float4 n;        // direction
+  unsigned int q;  // wavelength bin
+  unsigned int i;  // segment number
+  int fla, ofla;
+};
+
+struct photon{
+  float4 r;    // location, time
+  float4 n;    // direction, track length
+  unsigned int q; // track segment
+  unsigned int num; // number of photons in this bunch
+  int type;    // source type
+  float f;     // fraction of light from muon alone (without cascades)
+  union{
+    struct{
+      float a, b;  // longitudinal development parametrization coefficients
+      float beta;  // velocity of incident particle
+      float tau;   // luminescence decay time
+    };
+    struct{
+      float ka, up; // 2d-gaussian rms and zenith of cone
+      float fldr;   // horizontal direction of the flasher led #1
+      short fla, ofla;
+    };
+    int4 c;  // for quick copy
+  };
+};
+
+struct ices{
+  int wvl;               // wavelength number of this block
+  float ocm;             // 1 / speed of light in medium
+  float coschr, sinchr;  // cos and sin of the cherenkov angle
+  struct{
+    float abs;           // absorption
+    float sca;           // scattering
+  } z [MAXLYS];
+};
+
+struct aniz{
+  float k1;
+  float k2;
+  float ra;
+  float rb;
+};
+
+struct line{
+  short n, max;
+  float x, y, r;
+  float h, d;
+  float dl, dh;
+};
+
+struct datz{
+  ices w[WNUM];
+  float2 lp[LMAX][LYRS];
+  unsigned int rm[MAXRND];
+  unsigned long long rs[MAXRND];
+};
+
+struct dats{
+  atomic<unsigned int> hidx;
+  unsigned int ntot;
+
+  float rx;
+  float hifl;
+
+  unsigned int hnum;    // size of hits buffer
+  int size;   // size of kurt table
+  int rsize;  // count of multipliers
+  int gsize;  // count of initialized OMs
+
+  short tmod; // tilt model: 1: 1d, 2: 2d
+  short vthk; // 0: uniform layers, 1: variable thickness
+  float dh, rdh, hmin; // step, 1/step, and min depth
+
+  float ocv;  // 1 / speed of light in vacuum
+  float sf;   // scattering function: 0=HG; 1=SAM
+  float g, gr; // g=<cos(scattering angle)> and gr=(1-g)/(1+g)
+
+  float xR;   // DOM oversize scaling factor
+  float SF, G, GR; // hole ice sf, g, gr
+  float hr, hr2, hs, ha; // hole ice radius, radius^2, effective scattering and absorption coefficients
+
+  float azx, azy;  // ice anisotropy direction
+
+  int cn[2];
+  float cl[2], crst[2];
+
+  float cb[2][2];
+
+  int lnum, lpts, l0;
+  float lmin, lrdz, r0;
+  float lnx, lny;
+  float lr[LMAX];
+
+  float mmin[2], mstp[2];
+  int mnum[2], mcut[2];
+
+  float k1, k2, kz, fr; // ice absorption anisotropy parameters
+  aniz az[MAXLYS];
+
+  unsigned short ls[NSTR];
+  unsigned short is[CX][CY];
+  char mcol[CTX][CTY];
+
+  float sum, bfr[12];
+
+  line sc[NSTR];
+};
 
 struct doms{
   DOM oms[MAXGEO];
@@ -297,8 +461,12 @@ struct doms{
   photon * pz;
   pbuf * bf;
 
-  cl_float eff;  // OM efficiency correction
+  float eff;  // OM efficiency correction
 } q;
+
+dats * ed;
+datz * ez;
+DOM * oms;
 
 unsigned short sname(int n){
   static map<int, unsigned short> overflow;
@@ -319,6 +487,9 @@ static const float zoff=1948.07;
 unsigned int sv=0;
 
 void rs_ini(){
+  dats & d = * ed;
+  datz & z = * ez;
+
   union{
     unsigned long long da;
     struct{
@@ -337,10 +508,24 @@ void rs_ini(){
 
 struct ini{
   float ctr(line & s, int m){
+    dats & d = * ed;
     return d.cb[0][m]*s.x+d.cb[1][m]*s.y;
   }
 
+  ini(){
+    ed = new dats;
+    ez = new datz;
+  }
+
+  ~ini(){
+    delete ed;
+    delete ez;
+  }
+
   void set(){
+    dats & d = * ed;
+    datz & z = * ez;
+
     {
       d.hidx=0;
     }

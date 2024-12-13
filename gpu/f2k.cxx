@@ -230,14 +230,25 @@ unsigned int & flnd = flne;
 unsigned int flnd=0;
 #endif
 
+#ifdef DTMN
+int sign(float x){ return x<0?-1:x>0?1:0; }
+#endif
+
 int hcmp(const void *a, const void *b){
   hit & ah = * (hit *) a;
   hit & bh = * (hit *) b;
+#ifdef DTMN
+  return ah.n!=bh.n ? (int)(ah.n-bh.n) : ah.i!=bh.i ? (int)(ah.i-bh.i) : ah.t!=bh.t ? sign(ah.t-bh.t) : sign(ah.z-bh.z);
+#else
   return (int) ( ah.n - bh.n );
+#endif
 }
 
 void print(){
-  if((int) ( flnb - flnd ) < 0) qsort(q.hits, d.hidx, sizeof(hit), hcmp);
+#ifndef DTMN
+  if((int) ( flnb - flnd ) < 0)
+#endif
+    qsort(q.hits, d.hidx, sizeof(hit), hcmp);
 
   for(unsigned int i=0; i<d.hidx; i++){
     hit & h = q.hits[i];
@@ -260,7 +271,7 @@ void print(){
     bool flag=n.hv>0;
 
     if(flag){
-      irde mt=irdes[make_pair(n.omt,n.type)];
+      irde & mt = irdes[make_pair(n.omt,n.type)];
       flag=mt.rde>0&&xrnd()<mt.rat[h.z]*n.rde/mt.rmax;
     }
 
@@ -311,7 +322,7 @@ void print(){
     }
 
     if(flag){
-      float wv=q.wvs[h.z];
+      float wv=q.wvs[h.z].x();
 #ifdef XLIB
       tmph.omkey=n;
       tmph.pmt=pmt;
@@ -352,6 +363,10 @@ void print(){
 }
 
 void output(){
+#ifdef USE_I3_LOGGING
+  log_info_stream(pn << " ("<<pmax<<") photons from " << pk << " ("<<pmxo<<") tracks");
+#endif
+
   kernel(pn); pn=0; pk=0;
 
 #ifndef XCPU

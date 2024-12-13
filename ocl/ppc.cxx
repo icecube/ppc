@@ -19,6 +19,13 @@
 #include <CL/opencl.h>
 #endif
 
+#ifdef USE_I3_LOGGING
+#include "icetray/I3Logging.h"
+#else
+#define log_info_stream(msg) \
+  do { std::cerr << msg << std::endl; } while (0)
+#endif
+
 using namespace std;
 
 namespace xppc{
@@ -46,6 +53,7 @@ namespace xppc{
 #define MAXGEO 16384 // maximum number of OMs
 #define MAXRND 131072 // max. number of random number multipliers
 
+// #define DTMN
 #define XXX 1.e-5f
 #define FPI 3.141592653589793f
 #define OMR 0.16510f  // DOM radius [m]
@@ -445,6 +453,41 @@ namespace xppc{
     }
   }
 
+#ifdef XLIB
+  int lcm(int a, int b){
+    return a*b/gcd(a, b);
+  }
+
+  size_t getMaxBunchSize() { return pmxo; }
+
+  size_t getWorkgroupSize()
+  {
+    size_t workgroupSize = 0;
+    for(vector<gpu>::iterator i=gpus.begin(); i!=gpus.end(); i++) {
+      if (workgroupSize == 0) {
+	workgroupSize = i->nthr;
+      } else {
+	workgroupSize = lcm(workgroupSize, i->nthr);
+      }
+    }
+
+    if(getMaxBunchSize()%workgroupSize != 0){
+      cerr<<"MaxBunchSize is no good!"<<endl;
+      exit(2);
+    }
+    return workgroupSize;
+  }
+
+  float getTotalDeviceTime()
+  {
+    float total = 0;
+    for(vector<gpu>::const_iterator i=gpus.begin(); i!=gpus.end(); i++) {
+      total += i->deviceTime;
+    }
+    return total;
+  }
+#endif
+
   void fin(){
     for(vector<gpu>::iterator i=gpus.begin(); i!=gpus.end(); i++) i->set(), i->fin();
     delete q.pz;
@@ -569,7 +612,7 @@ namespace xppc{
     if(old>0){
       d.hidx=0;
       for(vector<gpu>::iterator i=gpus.begin(); i!=gpus.end(); i++) i->set(), i->kernel_i();
-      cerr<<"photons: "<<old<<"  hits: "<<d.hidx<<endl;
+      log_info_stream("photons: "<<old<<"  hits: "<<d.hidx);
     }
 
     {
@@ -649,7 +692,7 @@ int main(int arg_c, char *arg_a[]){
   else if(0==strcmp(arg_a[1], "-")){
     initialize();
     ices & w = z.w[WNUM/2];
-    cerr<<"For wavelength="<<q.wvs[w.wvl]<<" [nm]  np="<<(1/w.coschr)<<"  cm="<<1/w.ocm<<" [m/ns]"<<endl;
+    cerr<<"For wavelength="<<q.wvs[w.wvl].w<<" [nm]  np="<<(1/w.coschr)<<"  cm="<<1/w.ocm<<" [m/ns]"<<endl;
     cl_float4 r;
     r.w=0;
     if(arg_c==4){
@@ -666,7 +709,7 @@ int main(int arg_c, char *arg_a[]){
   else if(0==strcmp(arg_a[1], "=")){
     initialize();
     ices & w = z.w[WNUM/2];
-    cerr<<"For wavelength="<<q.wvs[w.wvl]<<" [nm]  np="<<(1/w.coschr)<<"  cm="<<1/w.ocm<<" [m/ns]"<<endl;
+    cerr<<"For wavelength="<<q.wvs[w.wvl].w<<" [nm]  np="<<(1/w.coschr)<<"  cm="<<1/w.ocm<<" [m/ns]"<<endl;
     cl_float4 r;
     r.w=0;
     string in;

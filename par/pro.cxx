@@ -1,13 +1,9 @@
-#ifdef XCPU
-#define __host__
-#define __device__
-#define __global__
-
 #define rsqrtf 1/sqrtf
-#define __float2int_rn (int)lroundf
-#define __float2int_ru (int)ceilf
-#define __float2int_rd (int)floorf
+#define float2int_rn (int)lroundf
+#define float2int_ru (int)ceilf
+#define float2int_rd (int)floorf
 
+#ifdef XCPU
 struct int2{
   int x, y;
 };
@@ -19,8 +15,9 @@ struct int3:int2{
 struct uint4{
   unsigned int x, y, z, w;
 };
+#endif
 
-float __int_as_float(unsigned int x){
+float int_as_float(unsigned int x){
   union{
     unsigned int i;
     float f;
@@ -28,35 +25,15 @@ float __int_as_float(unsigned int x){
   i=x; return f;
 }
 
-unsigned int atomicAdd(unsigned int * i, unsigned int j){
-  unsigned int k=*i; *i+=j;
-  return k;
-}
-
-struct ThreadIdx{
-  int x;
-} threadIdx;
-
-struct BlockDim{
-  int x;
-} blockDim;
-
-unsigned int seed=0;
-#endif
-
-__device__ float xrnd(uint4 & s){
+float xrnd(uint4 & s){
   unsigned long long sda = s.y;
-#ifdef XCPU
   sda += s.z * (unsigned long long) s.x;
-#else
-  asm("mad.wide.u32 %0, %1, %2, %0;" : "+l"(sda) : "r"(s.x), "r"(s.z));
-#endif
   s.x = sda; s.y = sda >> 32;
   unsigned int tmp = s.x >> 9;
-  return 2.0f-__int_as_float(tmp|0x3f800000);
+  return 2.0f-int_as_float(tmp|0x3f800000);
 }
 
-__device__ float mrnd(float k, uint4 & s){  // gamma distribution
+float mrnd(float k, uint4 & s){  // gamma distribution
   float x;
   if(k<1){  // Weibull algorithm
     float c=1/k;
@@ -84,31 +61,31 @@ __device__ float mrnd(float k, uint4 & s){  // gamma distribution
   return x;
 }
 
-__device__ float grnd(uint4 & s){  // gaussian distribution
+float grnd(uint4 & s){  // gaussian distribution
   return sqrtf(-2*logf(xrnd(s)))*sinf(2*FPI*xrnd(s));
 }
 
-__device__ void grnd2(float2 & p, uint4 & s){  // gaussian distribution
+void grnd2(float2 & p, uint4 & s){  // gaussian distribution
   float r=sqrtf(-2*logf(xrnd(s)));
   sincosf(2*FPI*xrnd(s), &p.y, &p.x);
   p.x*=r, p.y*=r;
 }
 
-__device__ void mx_normalize(float3 & n){
+void mx_normalize(float3 & n){
   float r=rsqrtf(n.x*n.x+n.y*n.y+n.z*n.z);
   n.x*=r, n.y*=r, n.z*=r;
 }
 
-__device__ void my_normalize(float4 & n){
+void my_normalize(float4 & n){
   float r=rsqrtf(n.x*n.x+n.y*n.y+n.z*n.z);
   n.x*=r, n.y*=r, n.z*=r;
 }
 
-__device__ void swap(float & x, float & y){
+void swap(float & x, float & y){
   float a=x; x=y; y=a;
 }
 
-__device__ void rotate(float & cs, float & si, float4 & n, uint4 & s){
+void rotate(float & cs, float & si, float4 & n, uint4 & s){
   float3 p1, p2;
   int i=0;
   {
@@ -152,28 +129,22 @@ __device__ void rotate(float & cs, float & si, float4 & n, uint4 & s){
   }
 }
 
-#ifndef XCPU
-__host__ __device__ int __float2int_rd(float x);
-__host__ int __float2int_rd(float x){ return (int)floorf(x); }
-#endif
-
-__host__ __device__ float square(float x){
+float square(float x){
   return x*x;
 }
 
-__host__ __device__ int findcol(dats & d, int x, int y){
+int findcol(dats & d, int x, int y){
   return x>=0 && x<d.mnum[0] && y>=0 && y<d.mnum[1] ? d.mcol[x][y] : -1;
 }
 
-__host__ __device__ float zshift(dats & d, float4 & r, float & dz){
+float zshift(dats & d, float4 & r, float & dz, datz & p){
   if(d.tmod==1){
     float nr=d.lnx*r.x+d.lny*r.y-d.r0;
     int j=1; for(; j<LMAX; j++) if(nr<d.lr[j] || j==d.lnum-1) break;
 
     float z=(r.z-d.lmin)*d.lrdz;
-    int i=j-1, k=min(max(__float2int_rd(z), 0), d.lpts);
+    int i=j-1, k=min(max(float2int_rd(z), 0), d.lpts);
 
-    datz & p = * d.z;
     float2 pi=p.lp[i][k], pj=p.lp[j][k];
 
     float2 w, q;
@@ -214,8 +185,8 @@ __host__ __device__ float zshift(dats & d, float4 & r, float & dz){
     }
 
     int2 qn;
-    qn.x=min(max(__float2int_rd(q.x), 0), d.mnum[0]);
-    qn.y=min(max(__float2int_rd(q.y), 0), d.mnum[1]);
+    qn.x=min(max(float2int_rd(q.x), 0), d.mnum[0]);
+    qn.y=min(max(float2int_rd(q.y), 0), d.mnum[1]);
 
     float2 qr;
     qr.x=q.x-qn.x;
@@ -246,9 +217,8 @@ __host__ __device__ float zshift(dats & d, float4 & r, float & dz){
     w.x=1-qrx, w.y=qrx-qry, w.z=qry;
 
     float z=(r.z-d.lmin)*d.lrdz;
-    int k=min(max(__float2int_rd(z), 0), d.lpts);
+    int k=min(max(float2int_rd(z), 0), d.lpts);
 
-    datz & p = * d.z;
     float2 px=p.lp[c.x][k], py=p.lp[c.y][k], pz=p.lp[c.z][k];
 
     q.x=0, q.y=0;
@@ -263,86 +233,38 @@ __host__ __device__ float zshift(dats & d, float4 & r, float & dz){
   else return 0;
 }
 
-__device__ void ctr(dats & d, float2 & r, float2 & p){
+void ctr(dats & d, float2 & r, float2 & p){
   p.x=d.cb[0][0]*r.x+d.cb[1][0]*r.y;
   p.y=d.cb[0][1]*r.x+d.cb[1][1]*r.y;
 }
 
-#ifndef XCPU
-__device__ inline unsigned int smid(){
-  unsigned int r;
-  asm volatile("mov.u32 %0, %%smid;" : "=r"(r));
-  return r;
-}
-#endif
+void propagate(const unsigned int num, dats * d, datz * ez, hit * hits, const photon * pz, pbuf * bf, const DOM * oms){
+  // for(unsigned int idx=0; idx<d->ntot; idx++){
+  for_each_n(execution::par_unseq, thrust::counting_iterator<unsigned int>(0), d->ntot, [num, d, ez, hits, pz, bf, oms](int idx){
+  dats & e = * d;
 
-#if defined(XCPU) || defined(DTMN)
-#define XINC i+=eidx
-#define XIDX e.gridDim*blockDim.x
-#else
-#define XINC i=atomicAdd(&eidx, e.gridDim)
-#define XIDX e.gridDim*blockDim.x+e.blockIdx
-#endif
-
-__global__ void propagate(dats * ed, unsigned int num){
   uint4 s;
   unsigned int niw=0;
-#ifdef XCPU
+
   float4 n;
   float4 r;
-  dats & e = * ed;
-  static unsigned int eidx;
-  if(threadIdx.x==0) eidx = XIDX;
-#else
-  float4 n={0,0,0,0};
-  float4 r={0,0,0,0};
-  __shared__ dats e;
-  unsigned int & eidx = e.hidx;
-
-  if(num==0){
-    ed->hidx=0;
-    ed->tn=-1U;
-    ed->tx=0;
-    ed->ab=0;
-    ed->mp=0;
-    __threadfence();
-    return;
-  }
-
-  if(threadIdx.x==0){
-    e=*ed; e.tn=clock();
-    e.blockIdx=smid()==e.blockIdx?-1:(int)atomicAdd(&ed->mp, 1);
-    eidx=XIDX;
-  }
-  __syncthreads();
-
-  if(e.blockIdx==-1) return;
-#endif
-
   ices * w;
-  const unsigned int idx=threadIdx.x*e.gridDim+e.blockIdx;
 
   {
-#ifndef XCPU
-    const unsigned int & seed = idx;
-#endif
-    s.w=seed%e.rsize;
-    s.x=e.z->rs[s.w];
-    s.y=e.z->rs[s.w] >> 32;
-    s.z=e.z->rm[s.w];
+    s.w=idx%e.rsize;
+    s.x=ez->rs[s.w];
+    s.y=ez->rs[s.w] >> 32;
+    s.z=ez->rm[s.w];
   }
 
-  int old;
-  float TOT=0, SCA;
+  for(unsigned int i=idx, pj=-1U, pn=0; i<num; i+=e.ntot){
+    while(i>=pn) pn+=pz[++pj].num;
 
-  for(unsigned int i=idx, pj=-1U, pn=0; i<num; i+=e.gridDim*blockDim.x){
-    while(e.gini+i%e.gspc+(i/e.gspc)*e.gtot>=pn) pn+=e.pz[++pj].num;
-
-    unsigned int j=min(__float2int_rd(WNUM*xrnd(s)), WNUM-1);
-    w=&e.z->w[j];
+    unsigned int j=min(float2int_rd(WNUM*xrnd(s)), WNUM-1);
+    w=&ez->w[j];
     n.w=w->ocm;
 
-    photon p=e.pz[pj];
+    photon p=pz[pj];
     r=p.r, n.x=p.n.x, n.y=p.n.y, n.z=p.n.z;
     float l=p.n.w; niw=p.q;
     int fla, ofla;
@@ -354,8 +276,8 @@ __global__ void propagate(dats * ed, unsigned int num){
 	float xi=xrnd(s);
 	if(p.fldr<0) xi*=2*FPI;
 	else{
-	  int r=__float2int_rd(p.fldr/360)+1;
-	  int s=__float2int_rd(xi*r);
+	  int r=float2int_rd(p.fldr/360)+1;
+	  int s=float2int_rd(xi*r);
 	  xi=(p.fldr+s*360/r)*fcv;
 	}
 	sincosf(xi, &n.y, &n.x);
@@ -452,7 +374,7 @@ __global__ void propagate(dats * ed, unsigned int num){
 
 	if(p.f<xrnd(s)){ // cascade particle directions
 	  const float a=0.39f, b=2.61f;
-	  const float I=1-expf(-b*exp2(a));
+	  const float I=1-expf(-b*exp2f(a));
 	  float cs=max(1-powf(-logf(1-xrnd(s)*I)/b, 1/a), -1.0f);
 	  float si=sqrtf(1-cs*cs); rotate(cs, si, n, s);
 	}
@@ -478,19 +400,42 @@ __global__ void propagate(dats * ed, unsigned int num){
       }
     }
 
-    pbuf f; f.r=r, f.n=n; f.q=j; f.i=niw; f.fla=fla, f.ofla=ofla; e.bf[i]=f;
+    pbuf f; f.r=r, f.n=n; f.q=j; f.i=niw; f.fla=fla, f.ofla=ofla; bf[i]=f;
   }
-#ifndef XCPU
-  __syncthreads();
-#endif
+  {
+    ez->rs[s.w]=s.x | (unsigned long long) s.y << 32;
+  }
+    }
+    );
+
+  // for(unsigned int idx=0; idx<d->ntot; idx++){
+  for_each_n(execution::par_unseq, thrust::counting_iterator<int>(0), d->ntot, [num, d, ez, hits, pz, bf, oms](int idx){
+  dats & e = * d;
+
+  uint4 s;
+  unsigned int niw=0;
+
+  float4 n;
+  float4 r;
+  ices * w;
+
+  {
+    s.w=idx%e.rsize;
+    s.x=ez->rs[s.w];
+    s.y=ez->rs[s.w] >> 32;
+    s.z=ez->rm[s.w];
+  }
+
+  int old;
+  float TOT=0, SCA;
 
   int ofla=-1;
-  for(unsigned int i=idx; i<num; TOT==0 && (XINC)){
+  for(unsigned int i=idx; i<num; TOT==0 && (i+=e.ntot)){
     int om=-1;
     if(TOT==0){ // initialize photon
-      pbuf f=e.bf[i];
+      pbuf f=bf[i];
       r=f.r; n=f.n;
-      w=&e.z->w[f.q];
+      w=&ez->w[f.q];
       niw=f.i;
       om=f.fla;
       ofla=f.ofla;
@@ -507,14 +452,14 @@ __global__ void propagate(dats * ed, unsigned int num){
     float anz=sign*n.z;
 
     float edh = e.dh;
-    float z = r.z - zshift(e, r, edh); // tilt correction
+    float z = r.z - zshift(e, r, edh, *ez); // tilt correction
 
     float nr=1.f;
     int I, J;
 
     {
       z=(z-e.hmin)*e.rdh;
-      I=min(max(__float2int_rn(z), 0), e.size-1); // curent layer
+      I=min(max(float2int_rn(z), 0), e.size-1); // curent layer
 
       if(TOT>0){ // anisotropic absorption
 	float n1= e.azx*n.x+e.azy*n.y;
@@ -589,11 +534,11 @@ __global__ void propagate(dats * ed, unsigned int num){
 
       int2 xl, xh;
 
-      xl.x=min(max(__float2int_rn((ri.x-e.cl[0])*e.crst[0]), 0), e.cn[0]);
-      xh.x=max(min(__float2int_rn((rf.x-e.cl[0])*e.crst[0]), e.cn[0]-1), -1);
+      xl.x=min(max(float2int_rn((ri.x-e.cl[0])*e.crst[0]), 0), e.cn[0]);
+      xh.x=max(min(float2int_rn((rf.x-e.cl[0])*e.crst[0]), e.cn[0]-1), -1);
 
-      xl.y=min(max(__float2int_rn((ri.y-e.cl[1])*e.crst[1]), 0), e.cn[1]);
-      xh.y=max(min(__float2int_rn((rf.y-e.cl[1])*e.crst[1]), e.cn[1]-1), -1);
+      xl.y=min(max(float2int_rn((ri.y-e.cl[1])*e.crst[1]), 0), e.cn[1]);
+      xh.y=max(min(float2int_rn((rf.y-e.cl[1])*e.crst[1]), e.cn[1]-1), -1);
 
       for(int i=xl.x, j=xl.y; i<=xh.x && j<=xh.y; ++j<=xh.y?:(j=xl.y,i++)) for(unsigned short k=e.is[i][j]; k!=0x8000; ){
 	unsigned short m=e.ls[k];
@@ -623,12 +568,12 @@ __global__ void propagate(dats * ed, unsigned int num){
 	    else zl=h2, zh=h1;
 
 	    int omin=0, omax=s.max;
-	    int n1=s.n-omin+min(omax+1, max(omin, __float2int_ru(omin-(zh-s.dl-s.h)*s.d)));
-	    int n2=s.n-omin+max(omin-1, min(omax, __float2int_rd(omin-(zl-s.dh-s.h)*s.d)));
+	    int n1=s.n-omin+min(omax+1, max(omin, float2int_ru(omin-(zh-s.dl-s.h)*s.d)));
+	    int n2=s.n-omin+max(omin-1, min(omax, float2int_rd(omin-(zl-s.dh-s.h)*s.d)));
 
 	    for(int l=n1; l<=n2; l++) if(l!=old){
 	      // if(l==e.fla) continue;
-	      const DOM & dom=e.oms[l];
+	      const DOM & dom=oms[l];
 
 	      float a=0, b=0, c=0, dr;
 	      float f=dom.F>0?square(1/dom.F):0;
@@ -681,7 +626,7 @@ __global__ void propagate(dats * ed, unsigned int num){
 	float xs=0, xa=0;
 
 	float y=z+n.z*fin/edh;
-	J=min(max(__float2int_rn(y), 0), e.size-1);
+	J=min(max(float2int_rn(y), 0), e.size-1);
 
 	if(I==J) xs=fin*w->z[I].sca, xa=fin*w->z[I].abs;
 	else{
@@ -726,10 +671,6 @@ __global__ void propagate(dats * ed, unsigned int num){
       r.w+=del*n.w;
     }
 
-#ifndef XCPU
-    if(!isfinite(TOT) || !isfinite(SCA)) ed->bmp[atomicAdd(&ed->ab, 1)%4]=smid(), TOT=0, om=-1;
-#endif
-
     if(om!=-1){ // DOM collision was detected
       if(om==ofla) TOT=0;
       else{
@@ -738,7 +679,7 @@ __global__ void propagate(dats * ed, unsigned int num){
 	h.pth=acosf(n.z); h.pph=atan2f(n.y, n.x);
 
 	sqd*=e.xR-1;
-	const DOM & dom=e.oms[om];
+	const DOM & dom=oms[om];
 	float dx=dom.r[0]-r.x+sqd*n.x;
 	float dy=dom.r[1]-r.y+sqd*n.y;
 	float dz=dom.r[2]-r.z+sqd*n.z;
@@ -746,8 +687,8 @@ __global__ void propagate(dats * ed, unsigned int num){
 	h.dth=acosf(min(max(dz/(e.xR*dom.R*dom.F), -1.f), 1.f)); h.dph=atan2f(dy, dx);
 
 	{
-	  unsigned int j = atomicAdd(&ed->hidx, 1);
-	  if(j<e.hnum) e.hits[j]=h;
+	  unsigned int j=e.hidx++;
+	  if(j<e.hnum) hits[j]=h;
 	}
 
 	if(e.xR==1) TOT=0; else old=om;
@@ -890,18 +831,10 @@ __global__ void propagate(dats * ed, unsigned int num){
       }
     }
   }
-
   {
-    e.z->rs[s.w]=s.x | (unsigned long long) s.y << 32;
-#ifndef XCPU
-    __syncthreads();
-    if(threadIdx.x==0){
-      e.tx=clock();
-      atomicMin(&ed->tn, e.tx-e.tn);
-      atomicMax(&ed->tx, e.tx-e.tn);
-    }
-    __threadfence();
-#endif
+    ez->rs[s.w]=s.x | (unsigned long long) s.y << 32;
   }
+    }
+    );
 
 }

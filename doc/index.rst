@@ -17,6 +17,10 @@ Files
 
   ppc for OpenCL
 
+- par/
+
+  ppc for std::par
+
 - llh/
 
   llh/DirectFit
@@ -200,13 +204,21 @@ these are set as usual within a shell (with an "export" as necessary). Within a 
 
     *example: BFRM=1*
 
-    Specifies the method for offsetting the added scattering due to birefringence from the main (Mie) scattering table: 0 (default) is single-value subtraction that keeps the existing wavelength parameterization for overall scattering intact (but is perhaps unphysical); 1 subtracts the birefringence effect from the scattering table values (given at 400 nm) and applies existing wavelength dependence to resulting reduced coefficients - this will requre re-parameterization of the wavelength dependence; and 2: does not subtract the birefringence effect at all, ans assumes that the table values of Mie scattering coefficients are are exactly that (to be perhaps used in the future ice fits).
+    Specifies the method for offsetting the added scattering due to birefringence from the main (Mie) scattering table: 0 (default) is single-value subtraction that keeps the existing wavelength parameterization for overall scattering intact (but is perhaps unphysical); 1 subtracts the birefringence effect from the scattering table values (given at 400 nm) and applies existing wavelength dependence to resulting reduced coefficients - this will requre re-parameterization of the wavelength dependence; and 2: does not subtract the birefringence effect at all, and assumes that the table values of Mie scattering coefficients are are exactly that (to be perhaps used in the future ice fits).
 
   - **NPHO/NPHO_X**
 
     *example: NPHO_2=512*
 
     sets the average number of photons to process in a single thread on a GPU. If underscore syntax is used, the number that follows the underscore sets the GPU for which to apply this setting. Setting this to 0 takes that GPU out of use. Default is 1024.
+
+  - **NTHR**
+
+    *Number of THReads*
+
+    *example: NTHR=$[84*1024]*
+
+    sets the number of threads to be run in parralel. This is equivalent to nthr*nblk within the CUDA or OpenCL version of the code and is only available for std::par. It is needed since there is no other means of determining available resouces by standard means available from std::par. If this number is too large, the kernel execution might exceed time limits imposed by the OS (a few seconds) and the program execution will fail. If it is too short the program progress will be slower than optimal. In the example above it is set for an A40 GPU, which has 84 MPs.
 
   - **HQUO**
 
@@ -381,6 +393,14 @@ these are set as usual within a shell (with an "export" as necessary). Within a 
     *example: FLOR=1*
 
     1: tilt the flasherboard in a direction consistent with the DOM tilt (only when MLPD=1). Default is 0
+
+  - **APFR**
+
+    *AfterPulse FRaction*
+
+    *example: APFR=0.01*
+
+    add afterpulses to simulated photons. Expected value is around 1 - 2%. Only a single template is implemented, only accurate up to ~4 us.
 
 - inv (the code used to fit RDEs and to unfold angular sensitivity curve)
 
@@ -592,7 +612,7 @@ Configuration files
        DEgg    120     1       0.5     0.150   0.267   2       180 0
                                                                  0 0
 
-    Area is an overall efficiency scaling parameter for a given sensor type. Parameter beta specifies the angular sensitivity function of a single PMT within any given sensor; values between -1 and 1 specify PMTs with approximately spherical cathodes (including flat with beta=1); values less than -1 (e.g., -2) specify cylindical sensitive area. Parameters Rr and Rz specify extensions of the spheroid that approximates the sensor geometry in the horizontal and vertical directions (spheroid is assumed symmetrical around the z-axis). Num is the number of PMTs within the sensor, and dir specify zenith and azimuth of each PMT. Cable, when specified, is the azimuthal direction to cable in the sensor's coordinate system. The sensor orientation itself is then determined from this number combined with the azimuthal direction to cable as given in file dx.dat.
+    Area is an overall efficiency scaling parameter for a given sensor type. Parameter beta specifies the angular sensitivity function of a single PMT within any given sensor; values between -1 and 1 specify PMTs with approximately spherical cathodes (including flat with beta=1); values less than -1 (e.g., -2) specify cylindrical sensitive area. Parameters Rr and Rz specify extensions of the spheroid that approximates the sensor geometry in the horizontal and vertical directions (spheroid is assumed symmetrical around the z-axis). Num is the number of PMTs within the sensor, and dir specify zenith and azimuth of each PMT. Cable, when specified, is the azimuthal direction to cable in the sensor's coordinate system. The sensor orientation itself is then determined from this number combined with the azimuthal direction to cable as given in file dx.dat.
 
   - **om.dirs**
 
@@ -788,6 +808,7 @@ since we have ice organized in layers of constant optical properties the integra
 
 on any segment the direction is fixed and absorption coefficient is modified according to the anisotropy model. It should be easy to do the same to the scattering coefficient, if necessary.
 
+it is possible to make ppc create a re-producible sequence of photons by uncommenting "#define DTMN" within the ppc core (files gpu/ini.cxx, ocl/ppc.cxx, par/ini.cxx} or adding -DDTMN to the compiler options. This will make the CUDA and OpenCL versions of the code slower (by ~ 15%) and will only result in the same sequence when the runs are repeated on the same GPU.
 
 Specific code details requested in tickets
 ------------------------------------------
@@ -823,7 +844,9 @@ Additional feature in the strategy of the oversize implementation is to continue
 RDE implementation
 ++++++++++++++++++
 
-The file wv.rde (ratio of high-QE to nominal vs. wavelength) will be phased out. New approach taken for the configuration of IceCube extensions is to specify the effective area vs. wavelength for each type of sensor PMT individually.
+The file wv.rde (ratio of high-QE to nominal vs. wavelength) will be phased out.
+New approach taken for the configuration of IceCube extensions is to specify the effective area vs. wavelength for each type of sensor PMT individually.
+
 
 References:
 -----------

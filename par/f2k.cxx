@@ -224,7 +224,7 @@ deque<string> flnz;
 #endif
 
 unsigned int flnb=0, flne=0;
-unsigned int flnd=0;
+unsigned int & flnd = flne;
 
 #ifdef DTMN
 int sign(float x){ return x<0?-1:x>0?1:0; }
@@ -241,6 +241,7 @@ int hcmp(const void *a, const void *b){
 }
 
 void print(){
+  dats & d = * ed;
 #ifndef DTMN
   if((int) ( flnb - flnd ) < 0)
 #endif
@@ -364,8 +365,6 @@ void output(){
 #endif
 
   kernel(pn); pn=0; pk=0;
-
-  flnd=flne;
 }
 
 void addh(unsigned long long num){
@@ -523,7 +522,6 @@ void finc(){
 
 void eout(){
   output();
-  output();
 }
 
 #ifdef XLIB
@@ -573,6 +571,8 @@ void flone(unsigned long long num){
 }
 
 const DOM& flset(int str, int dom){
+  dats & d = * ed;
+
   int type=1;
   float r[3]={0, 0, 0};
 
@@ -669,6 +669,7 @@ const float * fldir(){
 }
 
 void flshift(float r[], float n[], float *m = NULL){
+  dats & d = * ed;
   float sft[3]={0};
 
   if(p.ka>0){

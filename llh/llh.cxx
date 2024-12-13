@@ -1365,6 +1365,8 @@ void cascade::ffit(){
   }
 }
 
+double apfr=0;
+
 void cascade::runf(map< xkey, vector<hix> > & sim){
   const double ini=5, emax=100, bunch=2.5e9;
 
@@ -1377,7 +1379,22 @@ void cascade::runf(map< xkey, vector<hix> > & sim){
     for(xppc::outz::const_iterator i=xppc::hitz.begin(); i!=xppc::hitz.end(); ++i){
       const xppc::ihit & h = i->first;
       xkey om(make_pair(h.omkey.str, h.omkey.dom), h.pmt);
-      sim[om].push_back(hix(t+h.time+delay(), spe(*i), h.dir));
+      double ht=t+h.time+delay();
+      sim[om].push_back(hix(ht, spe(*i), h.dir));
+      if(xrnd()<apfr){
+	const double a=280, b=1900, c=1050, p=0.225, d=1270, s=1;
+	const double r=1/(1+(d*(p+1))/(b-a));
+	double x;
+	if(xrnd()<r){
+	  x=a+(b-a)*pow(xrnd(), 1/(p+1));
+	  double t=(a+c)/2;
+	  if(x>t && x<c) if(s*sin(2*M_PI*(x-t)/(c-a))>xrnd()*pow(x-a, p)) x=t-(x-t);
+	}
+	else{
+	  x=b-d*log(1-xrnd());
+	}
+	sim[om].push_back(hix(ht+x, spe(*i), h.dir));
+      }
     }
 
     xppc::efin();
@@ -2322,6 +2339,11 @@ int main(int arg_c, char *arg_a[]){
       flasher=true;
       cerr<<"Flasher at "<<fla.first<<","<<fla.second<<"."<<endl;
     }
+  }
+  {
+    char * bmp=getenv("APFR");
+    if(bmp!=NULL) apfr=atof(bmp);
+    cerr<<"APFR="<<apfr<<endl;
   }
   {
     char * bmp=getenv("FDUR");

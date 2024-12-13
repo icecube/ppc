@@ -1,0 +1,2 @@
+CUDA=/data/user/kmeagher/opt/nvidia/Linux_x86_64/2024/compilers
+export PATH=$PATH:$CUDA/bin
