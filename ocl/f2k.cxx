@@ -469,6 +469,12 @@ unsigned long long bnldev(unsigned long long n, double pp){  // down-sample with
   return bnl;
 }
 
+void addf(float rx, float ry, float rz, float t, unsigned long long num){
+  p.r.x=rx; p.r.y=ry; p.r.z=rz; p.r.w=t; p.type=7;
+  p.ka=0, p.up=0, p.fldr=0; p.fla=-1; p.ofla=-1;
+  addh(num);
+}
+
 void addp(float rx, float ry, float rz, float t, float E, float dr, int type, float scale = 1){
   p.r.x=rx; p.r.y=ry; p.r.z=rz; p.r.w=t;
   if(type<0){
@@ -559,6 +565,7 @@ void f2k(){
       else if(0==strcmp(name, "e-")) type=12;
       else if(0==strcmp(name, "e+")) type=13;
       else if(0==strcmp(name, "munu") || 0==strcmp(name, "hadr")) type=101;
+      else if(0==strcmp(name, "ph")) addf(x, y, z, t, E);
       if(type>=0) addp(x, y, z, t, E, l, type);
     }
   }

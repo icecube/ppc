@@ -213,36 +213,54 @@ struct itype{
   }
 };
 
-float cherenkov(float wva){ // m/cm^2
-  const float c=FPI*0.2/137.03599911;
-  float wv=wva*1.e-3;
-  float wv2=wv*wv;
-  float wv3=wv*wv2;
-  float wv4=wv*wv3;
-  float np=1.55749-1.57988*wv+3.99993*wv2-4.68271*wv3+2.09354*wv4;
-  return c*(1-1/(np*np))/wv2;
-}
+struct spec{
+  bool swv; // single wavelength distribution
+  int num;  // number of kept wavelength bins
+  float bin, wmin, wmax;
+
+  spec(): swv(false), num(450), wmin(250.f), wmax(700.f){
+    bin=(wmax-wmin)/num;
+  }
+
+  void ssw(float wva){ // set single wavelength
+    swv=true; num=10; wmin=wva-5.f; wmax=wva+5.f;
+    bin=(wmax-wmin)/num;
+  }
+
+  float wav(float i){
+    return wmin+bin*i;
+  }
+
+  float np(float wv, float * ng = NULL){ // phase and group refrative indices
+    float np=1.55749-wv*(1.57988-wv*(3.99993-wv*(4.68271-2.09354*wv)));
+    if(ng!=NULL) *ng=np*(1+0.227106-wv*(0.954648-wv*(1.42568-0.711832*wv)));
+    return np;
+  }
+
+  float cherenkov(float wva){
+    if(swv){ // over 10 nm
+      return 1/(wmax-wmin);
+    }
+    else{ // um^-2 (here) * nm*cm^2 (later) = 0.1 m
+      const float c=FPI*0.2/137.03599911;
+      float wv=wva*1.e-3, n=np(wv);
+      return c*(1-1/(n*n))/(wv*wv);
+    }
+  }
+} qwv;
 
 struct irde{
-  int num;  // number of kept wavelength bins
-  float bin, wmin, wmax, rde;
+  float rde;
   vector<float> dat, sum, rat;
 
   int oms;  // number of OMs of this type
   float rmax; // max RDE for this type
 
-  irde(): num(450), wmin(250.f), wmax(700.f),
-	  rde(0.f), oms(0), rmax(0.f){
-    bin=(wmax-wmin)/num;
-  }
+  irde(): rde(0.f), oms(0), rmax(0.f){}
 
   void addr(float r){ // enter new OM
     if(r>rmax) rmax=r;
     oms++;
-  }
-
-  float wav(float i){
-    return wmin+bin*i;
   }
 
   float binf(float p){
@@ -258,7 +276,7 @@ struct irde{
     float whi=qw[n-1]+(bhi<0?qw[n-1]-qw[n-2]:bhi);
     float w1=wlo, w2=qw[0], f1=0, f2=qf[0];
 
-    for(float w=wmin+bin/2; w<wmax; w+=bin){
+    for(float w=qwv.wmin+qwv.bin/2; w<qwv.wmax; w+=qwv.bin){
       while(qw[k]<w && k<n){
 	w1=w2, f1=f2; k++;
 	if(k<n) w2=qw[k], f2=qf[k];
@@ -1115,6 +1133,7 @@ struct ini{
 	    wy.push_back(wfla+10.f*(2*x-1)); // +- 10 nm smoothstep
 	  }
 	  cerr<<"Using single wavelength="<<wfla<<" [nm]"<<endl;
+	  qwv.ssw(wfla);
 	}
 	else{
 	  string flwl("dat");
@@ -1217,7 +1236,7 @@ struct ini{
 	    float w, f, u=0;
 	    while(inFile>>w>>f){
 	      if(f<0 || (num>0 && w<=u)){ flag=false; break; }
-	      qf.push_back(f*cherenkov(w)); qw.push_back(w);
+	      qf.push_back(f*qwv.cherenkov(w)); qw.push_back(w);
 	      u=w; num++;
 	    }
 	    if(qf.size()<2) flag=false;
@@ -1234,12 +1253,12 @@ struct ini{
       {
 	float sum=0;
 	int k=0;
-	for(float w=env.wmin+env.bin/2; w<env.wmax; w+=env.bin, k++){
+	for(float w=qwv.wmin+qwv.bin/2; w<qwv.wmax; w+=qwv.bin, k++){
 	  float val=0;
 	  for(map<pair<int,int>, irde>::iterator i=irdes.begin(); i!=irdes.end(); ++i){
 	    irde & mt = i->second;
 	    if(!mt.dat.empty()){
-	      float ri=mt.dat[k]*types[i->first.first].rde*mt.rmax*env.bin;
+	      float ri=mt.dat[k]*types[i->first.first].rde*mt.rmax*qwv.bin;
 	      mt.rde+=ri; mt.sum.push_back(mt.rde); mt.dat[k]=ri;
 	      if(val<ri) val=ri;
 	    }
@@ -1267,8 +1286,8 @@ struct ini{
 	  if(flag) flag=(bool)(inFile >> k >> ke);
 	  if(flag) flag=(bool)(inFile >> A >> Ae);
 	  if(flag) flag=(bool)(inFile >> B >> Be); fail=!flag;
-	  if(flag) flag=(bool)(inFile >> D >> De); if(!flag) D=pow(wv0, k);
-	  if(flag) flag=(bool)(inFile >> E >> Ee); if(!flag) E=0;
+	  if(flag) flag=(bool)(inFile >> D >> De); D=flag?D/pow(wv0, k):1;
+	  if(flag) flag=(bool)(inFile >> E >> Ee); E=flag?E/pow(wv0, k):0;
 	  if(fail) cerr << "File icemodel.par found, but is corrupt" << endl;
 	  inFile.close(); if(fail) exit(1);
 	}
@@ -1345,6 +1364,26 @@ struct ini{
 	d.az[i].ra=ra[j]; d.az[i].rb=ra[j]*rb[j];
       }
 
+      float arf=0;
+      {
+	char * absm=getenv("ABSM");
+	if(absm!=NULL){
+	  cerr<<"Ice absorption table: ";
+	  switch(atoi(absm)){
+	  case 0:
+	    cerr<<"MieDUST";
+	    break;
+	  case 1:
+	    arf=1;
+	    cerr<<"FULL400";
+	    break;
+	  default:
+	    cerr<<"UNKNOWN";
+	  }
+	  cerr<<endl;
+	}
+      }
+
       float srw=0, srf=1;
       {
 	char * bfrm=getenv("BFRM");
@@ -1371,13 +1410,13 @@ struct ini{
 
       for(int n=0; n<WNUM; n++){
 	float wvi=env.binf((n+0.f)/WNUM);
-	int mi=min(max((int) floor(wvi), 0), env.num-1);
+	int mi=min(max((int) floor(wvi), 0), qwv.num-1);
 
 	float wvf=env.binf((n+1.f)/WNUM);
-	int mf=min(max((int) floor(wvf), 0), env.num-1);
+	int mf=min(max((int) floor(wvf), 0), qwv.num-1);
 
-	float wva=env.wav(env.binf((n+0.5f)/WNUM));
-	q.wvs[n].w=wva; q.wvs[n].i=env.wav(wvi), q.wvs[n].f=env.wav(wvf);
+	float wva=qwv.wav(env.binf((n+0.5f)/WNUM));
+	q.wvs[n].w=wva; q.wvs[n].i=qwv.wav(wvi), q.wvs[n].f=qwv.wav(wvf);
 
 	for(map<pair<int,int>, irde>::iterator i=irdes.begin(); i!=irdes.end(); ++i){
 	  irde & mt = i->second;
@@ -1396,7 +1435,8 @@ struct ini{
 	}
 
 	float l_a=pow(wva/wv0, -a);
-	float l_k=pow(wva, -k);
+	float l_k=pow(wva/wv0, -k);
+	float AB0=A*exp(-B/wv0);
 	float ABl=A*exp(-B/wva);
 
 	ices & w = z.w[n];
@@ -1404,17 +1444,13 @@ struct ini{
 	for(int i=0; i<size; i++){
 	  int j=size-1-i;
 	  float bbl=bble>0?dp[j]<bblz&&dp[j]<bbly?bble*(1-dp[j]/bblz)*(1-dp[j]/bbly):0:0;
-	  float sca=(bbl+be[j]*l_a-ra[j]*d.sum*(srf+srw*l_a))/(1-d.g), abs=(D*ba[j]+E)*l_k+ABl*(1+0.01*td[j]);
+	  float sca = (bbl+be[j]*l_a - ra[j]*d.sum*(srf+srw*l_a))/(1-d.g);
+	  float abs = (D*ba[j]+E)*l_k + (ABl-arf*AB0*l_k)*(1+0.01*td[j]);
 	  if(sca>0 && abs>0) w.z[i].sca=sca, w.z[i].abs=abs;
 	  else{ cerr << "Invalid value of ice parameter, cannot proceed" << endl; exit(1); }
 	}
 
-	float wv=wva*1.e-3;
-	float wv2=wv*wv;
-	float wv3=wv*wv2;
-	float wv4=wv*wv3;
-	float np=1.55749-1.57988*wv+3.99993*wv2-4.68271*wv3+2.09354*wv4;
-	float ng=np*(1+0.227106-0.954648*wv+1.42568*wv2-0.711832*wv3);
+	float ng, np=qwv.np(wva*1.e-3, &ng);
 	float c=0.299792458; d.ocv=1/c; w.wvl=n; w.ocm=ng/c;
 	w.coschr=1/np; w.sinchr=sqrt(1-w.coschr*w.coschr);
       }

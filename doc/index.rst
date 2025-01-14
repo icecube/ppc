@@ -206,6 +206,14 @@ these are set as usual within a shell (with an "export" as necessary). Within a 
 
     Specifies the method for offsetting the added scattering due to birefringence from the main (Mie) scattering table: 0 (default) is single-value subtraction that keeps the existing wavelength parameterization for overall scattering intact (but is perhaps unphysical); 1 subtracts the birefringence effect from the scattering table values (given at 400 nm) and applies existing wavelength dependence to resulting reduced coefficients - this will requre re-parameterization of the wavelength dependence; and 2: does not subtract the birefringence effect at all, and assumes that the table values of Mie scattering coefficients are are exactly that (to be perhaps used in the future ice fits).
 
+  - **ABSM**
+
+    *ABSorption correction Method*
+
+    *example: ABSM=1*
+
+    Specifies the method for offsetting the intrinsic ice absorption from the dust (Mie) absorption table: 0 (default) assumes the icemodel.dat file specifies the dust (Mie) absorption table; 1 assumes the icemodel.dat file specifies the full absorption at 400 nm, which contains both dust (Mie) and intrinsic ice absorption. Both methods have the same wavelength parameterization and should be equivalent when used with the correctly compiled icemodel.dat file.
+
   - **NPHO/NPHO_X**
 
     *example: NPHO_2=512*
@@ -499,8 +507,8 @@ Configuration files
       # ppc configuration file: follow strict order below
       5     # over-R: DOM radius "oversize" scaling factor
       1.0   # overall DOM efficiency correction
-      0.35  # 0=HG; 1=SAM
-      0.9   # g=<cos(theta)>
+      0.35  # f_SL (scattering function) 0=HG; 1=SAM
+      0.9   # g=<cos(theta)> (scattering function)
 
       130.0 # azimuth of major anisotropy axis (deg)
       0.0   # magnitude of major anisotropy coefficient k1
@@ -710,7 +718,7 @@ Command-line parameters
 
   - one integer parameter [gpu]
 
-    Process particle simulation in f2k format from stdin. The muons must have been processed by mmc with the "-recc" option, which prints out all muon segments individually as "amu" particles. Here is an example of f2k input to ppc:
+    Process particle simulation in f2k format from stdin. The muons must have been processed by mmc with the "-recc" option, which prints out all muon segments individually as "amu" particles. An additional (to the f2k spec) TR particle "ph" can be specified, which inserts a photon (or integer number of photons, exactly specified and inserted as is, without sampling a Poisson distribution around given number or scaling for oversize). Here is an example of f2k input to ppc:
 
     ::
 
@@ -730,11 +738,13 @@ Command-line parameters
           l=500              # length, m
           energy=1.e5        # GeV
           t=0                # ns
+          N=1    # number of photons
 
           print "EM 1 1 1970 0 0 0"
           print "TR 1 0 e    ", x, y, z, zenith, azimuth, 0, energy, t
           print "TR 1 0 amu  ", x, y, z, zenith, azimuth, l, energy, t
           print "TR 1 0 hadr ", x, y, z, zenith, azimuth, 0, energy, t
+          print "TR 1 0 ph   ", x, y, z, zenith, azimuth, 0, N, t
           print "EE"
         }
         print "TEND ? ? ?"
