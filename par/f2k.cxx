@@ -652,6 +652,15 @@ const DOM& flset(int str, int dom){
     case 3: p.ka=0.0f; p.up=(90.0f-41.13f)*fcv; break;
     case 4: p.ka=0.0f; p.up=(41.13f-90.0f)*fcv; break;
     }
+
+    {
+      char * ELEV=getenv("ELEV");
+      if(ELEV!=NULL){
+	float elev=atof(ELEV);
+	cerr<<"Setting LED beam elevation angle to "<<elev<<" degrees"<<endl;
+	p.up=elev*fcv;
+      }
+    }
   }
 
   if(p.fldr>=0 && p.fldr<360){

@@ -31,6 +31,8 @@ bool fast=false;
 bool oldf=true;
 bool mlpd=false;
 bool unfm=true;
+bool mono=false;
+bool peak=false;
 bool flasher=false;
 int munf=0;
 int srep=1, drep=1;
@@ -40,6 +42,7 @@ double cbin=2./cnum;
 
 const int num=200;
 const bool cutz=true;  // cut end bins
+const bool keep=false; // keep end charge heaps
 const double bin=25;
 const double qmin=0.1;
 double qsat=500; // 2500
@@ -437,29 +440,11 @@ typedef struct{
     for(vector<hit>::const_iterator j=draw.begin(); j!=draw.end(); ++j){
       qtot+=j->q;
       if(isok(j->t)){
-	double t=floor((j->t-t0)/lbin), q=j->q;
-	if(cutz) if(t<=0 || t>=num-2) q=0;
+	double t=round((j->t-t0)/lbin), q=j->q;
+	if(cutz) if(t<0 || t>=num) q=0;
 	if(t<0) t=0; else if(t>=num) t=num-1;
 	dbin[int(t)]+=q; dtot+=q;
       }
-    }
-
-    {
-      int dmax=0;
-      double vmax=0;
-
-      for(int i=0; i<num; i++) if(dbin[i]>vmax) vmax=dbin[i], dmax=i;
-      n1=max(0, dmax-(int) round(500/lbin));
-
-      for(int i=num-1; i>dmax; i--) if(dbin[i]==vmax){ dmax=i; break; }
-      n2=min(dmax+(int) round(1000/lbin), num);
-
-      double d1=0, d2=0;
-      for(int i=0; i<n1; i++) d1+=dbin[i];
-      for(int i=n2; i<num; i++) d2+=dbin[i];
-      dbin[n1]+=d1; dbin[n2-1]+=d2;
-
-      dtop=&dbin[n1], stop=&sbin[n1], ntop=n2-n1;
     }
 
     optimize();
@@ -468,10 +453,10 @@ typedef struct{
   void pfill(){
     for(int k=n1; k<n2; k++) dbin[k]=0; dtot=0;
     for(vector<hit>::const_iterator j=praw.begin(); j!=praw.end(); ++j) if(isok(j->t)){
-	double t=floor((j->t-t0)/lbin), q=j->q;
-	if(cutz) if(t<=0 || t>=num-2) q=0;
-	if(t<n1) t=n1; else if(t>=n2) t=n2-1;
-	dbin[int(t)]+=q; dtot+=q;
+	double t=round((j->t-t0)/lbin), q=j->q;
+	if(cutz) if(t<0 || t>=num) q=0;
+	if(keep){ if(t<n1) t=n1; else if(t>=n2) t=n2-1; }
+	if(n1<=t && t<n2){ dbin[int(t)]+=q; dtot+=q; }
       }
 
     int f=ntop-1, fnum=0;
@@ -486,10 +471,10 @@ typedef struct{
     if(isfinite(dt)){
       for(int k=n1; k<n2; k++) sbin[k]=0; stot=0;
       for(vector<hit>::const_iterator j=sraw.begin(); j!=sraw.end(); ++j) if(isok(j->t+dt+t0)){
-	double t=floor((j->t+dt)/lbin), q=j->q;
-	if(cutz) if(t<=0 || t>=num-2) q=0;
-	if(t<n1) t=n1; else if(t>=n2) t=n2-1;
-	sbin[int(t)]+=q; stot+=q;
+	double t=round((j->t+dt)/lbin), q=j->q;
+	if(cutz) if(t<0 || t>=num) q=0;
+	if(keep){ if(t<n1) t=n1; else if(t>=n2) t=n2-1; }
+	if(n1<=t && t<n2){ sbin[int(t)]+=q; stot+=q; }
       }
 
       join();
@@ -518,24 +503,104 @@ typedef struct{
     return R+Q;
   }
 
-  double opt[num];
+  double opt[num], val[num];
   int lastchange[num];
 
   double dat[num], sim[num];
   int fnum;
 
   void optimize(){
+    int htop;
+
+    if(peak){
+      n1=0; n2=num; dtop=dbin; stop=sbin; ntop=num;
+
+      double opt1[num], val1[num];
+
+      for(int n=0; n<ntop; n++){
+	double sD=0, mxo, rat, sat;
+	int mxj=-1;
+	for(int j=n; j>=0; j--){
+	  sD+=dtop[j];
+	  int len=n-j+1;
+	  double aux=G(len, sD), rat=sD/len;
+	  if(j>0) aux+=opt1[j-1];
+	  if(j==0 || val1[j-1]<rat) if(mxj==-1 || aux>mxo){ mxo=aux; sat=rat; mxj=j; }
+	}
+	opt1[n]=mxo; val1[n]=sat;
+      }
+
+      double opt2[num], val2[num];
+
+      for(int n=ntop-1; n>=0; n--){
+	double sD=0, mxo, rat, sat;
+	int mxj=-1;
+	for(int j=n; j<ntop; j++){
+	  sD+=dtop[j];
+	  int len=j-n+1;
+	  double aux=G(len, sD), rat=sD/len;
+	  if(j<ntop-1) aux+=opt2[j+1];
+	  if(j==ntop-1 || val2[j+1]<rat) if(mxj==-1 || aux>mxo){ mxo=aux; sat=rat; mxj=j; }
+	}
+	opt2[n]=mxo; val2[n]=sat;
+      }
+
+      {
+	int m=-2;
+	double sum=0;
+	for(int n=-1; n<ntop; n++){
+	  double aux = (n>=0?opt1[n]:0) + (n<ntop-1?opt2[n+1]:0);
+	  if(m==-2 || aux>sum) m=n, sum=aux;
+	}
+	
+	if(m==-1 || m<ntop-1 && val2[m+1]>val1[m]) m++;
+	n1=max(0, m-(int) round(500/lbin)); htop=m;
+      }
+
+      {
+	int m=ntop+1;
+	double sum=0;
+	for(int n=ntop; n>=0; n--){
+	  double aux = (n<ntop?opt2[n]:0) + (n>0?opt1[n-1]:0);
+	  if(m==ntop+1 || aux>sum) m=n, sum=aux;
+	}
+
+	if(m==ntop || m>0 && val2[m]<val1[m-1]) m--;
+	n2=min(m+(int) round(1000/lbin), num); htop=(m+htop)/2;
+      }
+    }
+
+    else{
+      int dmax=0;
+      double vmax=0;
+
+      for(int i=0; i<num; i++) if(dbin[i]>vmax) vmax=dbin[i], dmax=i;
+      n1=max(0, dmax-(int) round(500/lbin)); htop=dmax;
+
+      for(int i=num-1; i>dmax; i--) if(dbin[i]==vmax){ dmax=i; break; }
+      n2=min(dmax+(int) round(1000/lbin), num); htop=(dmax+htop)/2;
+    }
+
+    if(keep){
+      double d1=0, d2=0;
+      for(int i=0; i<n1; i++) d1+=dbin[i];
+      for(int i=n2; i<num; i++) d2+=dbin[i];
+      dbin[n1]+=d1; dbin[n2-1]+=d2;
+    }
+
+    dtop=&dbin[n1], stop=&sbin[n1], ntop=n2-n1; htop-=n1;
+
     for(int n=0; n<ntop; n++){
-      double sD=0, mxo;
+      double sD=0, mxo, rat, sat;
       int mxj=-1;
       for(int j=n; j>=0; j--){
 	sD+=dtop[j];
 	int len=n-j+1;
-	double aux=G(len, sD);
+	double aux=G(len, sD), rat=sD/len;
 	if(j>0) aux+=opt[j-1];
-	if(mxj==-1 || aux>mxo){ mxo=aux; mxj=j; }
+	if(!mono || j==0 || (val[j-1]-rat)*(j-0.5-htop)>0) if(mxj==-1 || aux>mxo){ mxo=aux; sat=rat; mxj=j; }
       }
-      opt[n]=mxo; lastchange[n]=mxj;
+      opt[n]=mxo; val[n]=sat; lastchange[n]=mxj;
     }
 
     int f=ntop-1; fnum=0;
@@ -2330,6 +2395,16 @@ int main(int arg_c, char *arg_a[]){
     char * bmp=getenv("UNFM");
     if(bmp!=NULL && !(*bmp!=0 && atoi(bmp)==0)) unfm=false;
     cerr<<"Using the "<<(unfm?"old (faster)":"new (more precise)")<<" unfolding method!"<<endl;
+  }
+  {
+    char * bmp=getenv("MONO");
+    if(bmp!=NULL && !(*bmp!=0 && atoi(bmp)==0)) mono=true;
+    if(mono) cerr<<"Assuming single peak time distributions"<<endl;
+  }
+  {
+    char * bmp=getenv("PEAK");
+    if(bmp!=NULL && !(*bmp!=0 && atoi(bmp)==0)) peak=true;
+    if(peak) cerr<<"Use precise max bin search in time distributions"<<endl;
   }
   {
     char * bmp=getenv("FLSH");

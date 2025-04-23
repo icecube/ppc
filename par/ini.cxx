@@ -1502,12 +1502,12 @@ struct ini{
 	    }
 	  }
 	  inFile.close();
-	  if(size<2){ cerr << "File icemodel.dat found, but is corrupt" << endl; exit(1); }
+	  if(size<1){ cerr << "File icemodel.dat found, but is corrupt" << endl; exit(1); }
 	}
 	else{ cerr << "File icemodel.dat was not found" << endl; exit(1); }
       }
 
-      dh=(dp[size-1]-dp[0])/(size-1);
+      dh=size>1?(dp[size-1]-dp[0])/(size-1):100.f;
       if(dh<=0){ cerr << "Ice table does not use increasing depth spacing" << endl; exit(1); }
 
       for(int i=0; i<size; i++) if(i>0) if(fabs(dp[i]-dp[i-1]-dh)>dh*XXX){

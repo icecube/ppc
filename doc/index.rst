@@ -158,6 +158,14 @@ these are set as usual within a shell (with an "export" as necessary). Within a 
 
     sets the correction to the LED elevation angle (nominally equal to -0.2 degrees for horizontal and 48.1 degrees for tilted flasher LEDs). Unless specified, the value is 0 when simulating the LED profile with a 2d-gaussian. If simulating the more accurate lab-measured LED profile (see description of FWID), the correction value is set to +2.0 degrees for horizontal and -5.0 degrees for tilted flashers. As of mid-2021 the best value used was +2.6 degrees for horizonatal and -6.3 degrees for tilted LEDs.
 
+  - **ELEV**
+
+    *flasher led ELEVation angle*
+
+    *example: ELEV=5*
+
+    This sets the flasher LED elevation angle directly (instead of as a correction to the nominal values). This still uses the internal sensor LED coordinates for DOM LEDs, possibly to be changed in the future. So, consider this option experimental for now. Default: not used.
+
   - **OVSZ**
 
     *OVerSiZe factor*
@@ -335,6 +343,22 @@ these are set as usual within a shell (with an "export" as necessary). Within a 
     *use: UNFM=0/1*
 
     1: Use slower (but more precise) minimizer (using golden ratio algorithm) for t0 search. Default is 0
+
+  - **MONO**
+
+    *MONOtonize*
+
+    *use: MONO=0/1*
+
+    Set MONO=1 to bin data such that the bins rise and fall monotonically around a single maximum bin. This is done via a modification to the bayesian block algorithm. This works well for flasher data, but you may need to disable this (default behavior) if multiple peaks in data waveforms are important (and the fit needs to reproduce this - such as in tau double bang studies). Default is 0
+
+  - **PEAK**
+
+    *slow/precise PEAK search*
+
+    *use: PEAK=0/1*
+
+    Set PEAK=1 to use a more accurate but slower bin optimization that searches for the best peak bin location in bayesian-block single-peak bin solutions. Otherwise (nominally) the peak bin is assumed to contain the max value bin of the input binning. The captured binned range extends (up to) 500 ns from the front of the peak bin into earlier times, and (up to) 1000 ns from the end of the peak bin into later times. This can be used with or without MONO=1 option. Default is 0
 
   - **MLPD**
 
@@ -571,7 +595,7 @@ Configuration files
 
   - **icemodel.dat**
 
-    main ice properties table: depth of the center of the layer, be(400), adust(400), delta tau (as defined in section 4 of the SPICE paper). All layers must be of equal width, and there must be at least 2 layers defined in the file. If the file icemodel.par contains 6 parameters, then the absorption coefficient is calculated as adust(400)=(D*[3rd element in a line]+E)*400^-kappa.
+    main ice properties table: depth of the center of the layer, be(400), adust(400), delta tau (as defined in section 4 of the SPICE paper). All layers must be of equal width, and there must be at least 1 layer defined in the file. If there is only one layer, the layer width is set to 100 m, otherwise it is calculated from the layer depth spacing. If the file icemodel.par contains 6 parameters, then the absorption coefficient is calculated as adust(400)=(D*[3rd element in a line]+E)*400^-kappa.
 
     This file may contain 2 additional optional columns, containing the anisotropy coefficients k1 and k2. Ice layers defined with lines containing k1 and k2 will use these anisotropy coefficients instead of those specified in file cfg.txt
 
@@ -620,7 +644,7 @@ Configuration files
        DEgg    120     1       0.5     0.150   0.267   2       180 0
                                                                  0 0
 
-    Area is an overall efficiency scaling parameter for a given sensor type. Parameter beta specifies the angular sensitivity function of a single PMT within any given sensor; values between -1 and 1 specify PMTs with approximately spherical cathodes (including flat with beta=1); values less than -1 (e.g., -2) specify cylindrical sensitive area. Parameters Rr and Rz specify extensions of the spheroid that approximates the sensor geometry in the horizontal and vertical directions (spheroid is assumed symmetrical around the z-axis). Num is the number of PMTs within the sensor, and dir specify zenith and azimuth of each PMT. Cable, when specified, is the azimuthal direction to cable in the sensor's coordinate system. The sensor orientation itself is then determined from this number combined with the azimuthal direction to cable as given in file dx.dat.
+    Area is an overall efficiency scaling parameter for a given sensor type. Parameter beta specifies the angular sensitivity function of a single PMT within any given sensor; values between -1 and 1 specify PMTs with approximately spherical cathodes (including flat with beta=1); values less than -1 (e.g., -2) specify cylindrical sensitive area. Parameters Rr and Rz specify extensions of the spheroid that approximates the sensor geometry in the horizontal and vertical directions (spheroid is assumed symmetrical around the z-axis). If Rz is negative, the sensor is assumed cylindrical instead (with the radius Rr and length of -2*Rz). Num is the number of PMTs within the sensor, and dir specify zenith and azimuth of each PMT. Cable, when specified, is the azimuthal direction to cable in the sensor's coordinate system. The sensor orientation itself is then determined from this number combined with the azimuthal direction to cable as given in file dx.dat.
 
   - **om.dirs**
 

@@ -1,5 +1,7 @@
 gcpp	=	nvc++ ppc.cxx -O2
 
+gopt	=	-stdpar=gpu -gpu=cc60
+
 mlib	=	-fPIC -DXLIB -c -o ppc.o && $(CC) -shared \
 		-fPIC -Wl,-soname,xppc ppc.o -o libxppc.so
 
@@ -12,13 +14,13 @@ all:
 	@echo "	make clib: compile the libxppc library for CPU"
 
 go:
-	$(gcpp) -o ppc.o -DXLIB -c -stdpar=gpu
+	$(gcpp) -o ppc.o -DXLIB -c $(gopt)
 
 gpu:
-	$(gcpp) -o ppc -stdpar=gpu
+	$(gcpp) -o ppc $(gopt)
 
 glib:
-	$(gcpp) -stdpar=gpu $(mlib)
+	$(gcpp) $(gopt) $(mlib)
 
 co:
 	$(gcpp) -o ppc.o -DXLIB -c -stdpar=multicore -DXCPU
