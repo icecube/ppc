@@ -358,7 +358,7 @@ these are set as usual within a shell (with an "export" as necessary). Within a 
 
     *use: PEAK=0/1*
 
-    Set PEAK=1 to use a more accurate but slower bin optimization that searches for the best peak bin location in bayesian-block single-peak bin solutions. Otherwise (nominally) the peak bin is assumed to contain the max value bin of the input binning. The captured binned range extends (up to) 500 ns from the front of the peak bin into earlier times, and (up to) 1000 ns from the end of the peak bin into later times. This can be used with or without MONO=1 option. Default is 0
+    Set PEAK=1 to use a more accurate but slower bin optimization that searches for the best peak bin location in bayesian-block single-peak bin solutions. Otherwise (nominally) the peak bin is assumed to contain the max value bin of the input binning. The captured binned range extends (up to) 500 ns from the front of the peak bin into earlier times, and (up to) 1000 ns from the end of the peak bin into later times. For waveforms with only one bin (e.g., when captured charge is low) this means the bin is extended to cover the full time range of the event (or 5000 ns, whichever is larger), as compared to usually smaller window of only 1500 ns. This can be used with or without MONO=1 option. Default is 0
 
   - **MLPD**
 

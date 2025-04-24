@@ -460,7 +460,7 @@ typedef struct{
       }
 
     int f=ntop-1, fnum=0;
-    for(int k=lastchange[f]; ; k=lastchange[k-1]){
+    for(int k=lastchange[f]; ; k=lastchange[f]){
       double d=0;
       for(; f>=k; f--) d+=dtop[f];
       dat[fnum++]=d; if(k==0) break;
@@ -604,7 +604,7 @@ typedef struct{
     }
 
     int f=ntop-1; fnum=0;
-    for(int k=lastchange[f]; ; k=lastchange[k-1]){
+    for(int k=lastchange[f]; ; k=lastchange[f]){
       double d=0;
       for(; f>=k; f--) d+=dtop[f];
       dat[fnum++]=d; if(k==0) break;
@@ -613,7 +613,7 @@ typedef struct{
 
   void join(){
     int f=ntop-1, fnum=0;
-    for(int k=lastchange[f]; ; k=lastchange[k-1]){
+    for(int k=lastchange[f]; ; k=lastchange[f]){
       double s=0;
       for(; f>=k; f--) s+=stop[f];
       sim[fnum++]=s; if(k==0) break;
@@ -623,11 +623,11 @@ typedef struct{
   void bins(){
     int f=ntop-1;
     double q=0;
-    for(int k=lastchange[f]; ; k=lastchange[k-1]){
+    for(int k=lastchange[f]; ; k=lastchange[f]){
       double s=0;
-      if(f==ntop-1) s+=num-n2;
-      for(; f>=k; f--) s++;
-      if(f==0) s+=n1;
+      if(keep) if(f==ntop-1) s+=num-n2;
+      s+=f-(k-1), f=k-1; // for(; f>=k; f--) s++;
+      if(keep) if(k==0) s+=n1;
       noise.push_back(s), q+=s;
       if(k==0) break;
     }
@@ -1889,11 +1889,13 @@ void cascade::printout(vector< pair<xkey, hix> > sto[], int jnum){
     dat & d=i->second;
     if(d.in()){
       const xkey & om=i->first;
+      if(!keep) if(d.n2<num) cout<<om<<" "<<num-d.n2<<" 0 0"<<endl;
       for(int k=0; k<d.fnum; k++, n++){
 	cout<<om<<" "<<noise[n]/nsq<<" "<<d.dat[k]/drep;
 	for(int m=0; m<jnum; m++) cout<<" "<<A[n+m*ndof]/srep;
 	cout<<endl;
       }
+      // if(!keep) if(d.n1>0) cout<<om<<" "<<d.n1<<" 0 0"<<endl;
     }
   }
 
