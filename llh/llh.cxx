@@ -1522,14 +1522,14 @@ void cascade::runf(map< xkey, vector<hix> > & sim){
 	  for(int J=0; J<jnum; J++){
 	    int j=qx[J];
 
-	    float n[3], r[3]={(float) x, (float) y, (float) z};
+	    float n[3];
 	    if(j1==-1 && j<j0){
 	      // n[0]=0, n[1]=0, n[2]=2*j-1;
 	      for(int i=0; i<3; i++) n[i]=(2*j-1)*fln[i];
 	    }
 	    else if(j2==-2){
-	      sincosf(cv*step*(j-j0), &n[1], &n[0]); n[2]=0;
-	      xppc::flshift(r, n, fln);
+	      sincosf(cv*step*(j-j0), &n[1], &n[0]); n[2]=NAN;
+	      xppc::flshift(fln, n);
 	    }
 	    else{
 	      n[0]=0, n[1]=0, n[2]=0;
@@ -1537,7 +1537,7 @@ void cascade::runf(map< xkey, vector<hix> > & sim){
 
 	    xppc::sett(n[0], n[1], n[2], id, j);
 	    if(e>0) E[j]*=etot/e, T[j]+=E[j];
-	    xppc::addp(r[0], r[1], r[2], 0.f, E[j]*bunch, 0.f, j<j0?j1:j2);
+	    xppc::addp((float) x, (float) y, (float) z, 0.f, E[j]*bunch, 0.f, j<j0?j1:j2);
 	  }
 	}
 	else{
@@ -1596,21 +1596,21 @@ void cascade::runf(map< xkey, vector<hix> > & sim){
     {
       if(mlpd){
 	for(int j=0; j<jnum; j++){
-	  float n[3], r[3]={(float) x, (float) y, (float) z};
+	  float n[3];
 	  if(j1==-1 && j<j0){
 	    // n[0]=0, n[1]=0, n[2]=2*j-1;
 	    for(int i=0; i<3; i++) n[i]=(2*j-1)*fln[i];
 	  }
 	  else if(j2==-2){
-	    sincosf(cv*step*(j-j0), &n[1], &n[0]); n[2]=0;
-	    xppc::flshift(r, n, fln);
+	    sincosf(cv*step*(j-j0), &n[1], &n[0]); n[2]=NAN;
+	    xppc::flshift(fln, n);
 	  }
 	  else{
 	    n[0]=0, n[1]=0, n[2]=0;
 	  }
 
 	  xppc::sett(n[0], n[1], n[2], id, j);
-	  xppc::addp(r[0], r[1], r[2], 0.f, e*unfE[j]*bunch*(ang.flag?srep:1), 0.f, j<j0?j1:j2);
+	  xppc::addp((float) x, (float) y, (float) z, 0.f, e*unfE[j]*bunch*(ang.flag?srep:1), 0.f, j<j0?j1:j2);
 	}
       }
       else{

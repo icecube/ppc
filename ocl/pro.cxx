@@ -415,13 +415,11 @@ __kernel void propagate(__private uint num,
 
   const unsigned int idx=get_local_id(0)*get_num_groups(0)+get_group_id(0);
 
-  int niw=0, old=idx%e.rsize;
+  int old=idx%e.rsize;
   uint4 s = (uint4)(ez->rs[old], ez->rs[old] >> 32, ez->rm[old], old);
 
   float4 r=(float4)(0);
   float4 n=(float4)(0);
-
-  float TOT=0, SCA;
 
   for(unsigned int i=idx, pj=-1U, pn=0; i<num; i+=get_global_size(0)){
     while(e.gini+i%e.gspc+(i/e.gspc)*e.gtot>=pn) pn+=ep[++pj].num;
@@ -432,13 +430,13 @@ __kernel void propagate(__private uint num,
 
     photon p=ep[pj];
     r=p.r, n.xyz=p.n.xyz;
-    float l=p.n.w; niw=p.q;
+    float l=p.n.w;
     int fla, ofla;
 
     if(p.type>0){
       fla=p.fla, ofla=p.ofla;
 
-      if(p.type<=4){
+      if(l==0){ // N-fold/cylidrical
 	float xi=xrnd(&s);
 	if(p.fldr<0) xi*=2*FPI;
 	else{
@@ -446,16 +444,15 @@ __kernel void propagate(__private uint num,
 	  int s=convert_int_sat_rtn(xi*r);
 	  xi=radians(p.fldr+s*360/r);
 	}
-	n.x=cos(xi), n.y=sin(xi);
+	r.x=cos(xi), r.y=sin(xi);
+	xi=cos(p.up); n.z=sin(p.up);
+	n.x=xi*r.x; n.y=xi*r.y;
+      }
 
-	float FLZ=0.07735f, FLR=0.119f-0.008f, FLB=0.03396f;
-	if(p.ka>0) r=(float4)(FLR*n.x, FLR*n.y, FLZ, 0);
-
-	float np=cos(p.up); n.z=sin(p.up);
-	n.x*=np; n.y*=np;
-
-	if(p.ka>999.f){
-	  float pf=xrnd(&s);
+      if(p.ka!=0){
+	float xi;
+	if(p.ka>999.f){ // lab-measured beam, precise simulation for DOM
+	  xi=xrnd(&s);
 
 	  float   s1=0.0191329f, s2=0.0686944f, C1=0.583583f, C2=0.967762f;
 	  switch(p.type){
@@ -463,61 +460,57 @@ __kernel void propagate(__private uint num,
 	  case 2: s1=0.0185603f, s2=0.0624481f, C1=0.553192f, C2=0.974129f; break;
 	  }
 
-	  xi = pf<C1 ? 1-s1*fabs(grnd(&s)) : pf<C2 ? 1+s2*log(xrnd(&s)) : -1.f;
-
+	  xi = xi<C1 ? 1-s1*fabs(grnd(&s)) : xi<C2 ? 1+s2*log(xrnd(&s)) : -1.f;
 	  if(xi<=-1.f) xi=2*sqrt(xrnd(&s))-1;
-	  float si=sqrt(1-xi*xi); n=turn(xi, si, n, &s);
 	}
-	else if(p.ka!=0){ // old 2d gaussian
-	  if(p.ka<0) xi=2*xrnd(&s)-1;
-	  else do{ xi=1+p.ka*log(xrnd(&s)); } while (xi<-1);
-	  float si=sqrt(1-xi*xi); n=turn(xi, si, n, &s);
-	}
+	else if(p.ka>0) do{ xi=1+p.ka*log(xrnd(&s)); } while (xi<-1); // 2d gaussian
+	else if(p.ka==-1) xi=2*xrnd(&s)-1; // isotropic
+	else xi=2*sqrt(xrnd(&s))-1; // linear cone
 
-	if(p.ka>0){
-	  float b=r.x*n.x+r.y*n.y+r.z*n.z;
-	  float c=FLZ*FLZ+FLR*FLR-OMR*OMR;
-	  float t=sqrt(b*b-c)-b;
-	  r+=t*(float4)(n.xyz, e.ocv);
-	  if(fabs(r.z)<FLB) ofla=-2;
-	  else if(r.z<0) if(xrnd(&s)<0.9) ofla=-3;
+	float si=sqrt(1-xi*xi); n=turn(xi, si, n, &s);
+      }
 
-	  if(p.ka>1050){
-	    float rc=0.023f;
-	    float dc=OMR+rc;
+      if(p.ka>999.f){
+	const float FLZ=0.07735f, FLR=0.119f-0.008f, FLB=0.03396f;
+	if(l==0) r=(float4)(FLR*r.x, FLR*r.y, FLZ, 0);
 
-	    float ph=radians(p.ka-1080);
-	    {
-	      float drx=r.x-dc*cos(ph);
-	      float dry=r.y-dc*sin(ph);
-	      float a=n.x*n.x+n.y*n.y;
-	      if(a>0){
-		float b=n.x*drx+n.y*dry;
-		float c=drx*drx+dry*dry-rc*rc;
-		float D=b*b-a*c;
-		if(D>=0){
-		  float h1=(-b+sqrt(D))/a;
-		  if(h1>0) ofla=-4;
-		}
+	float b=r.x*n.x+r.y*n.y+r.z*n.z;
+	float c=FLZ*FLZ+FLR*FLR-OMR*OMR;
+	float t=sqrt(b*b-c)-b;
+	r+=t*(float4)(n.xyz, e.ocv);
+
+	if(fabs(r.z)<FLB) ofla=-2;
+	else if(l==0 && r.z<0 && xrnd(&s)<0.9f) ofla=-3;
+
+	if(p.ka>1050.f){
+	  const float rc=0.023f;
+	  const float dc=OMR+rc;
+
+	  float ph=radians(p.ka-1080.f);
+	  {
+	    float drx=r.x-dc*cos(ph);
+	    float dry=r.y-dc*sin(ph);
+	    float a=n.x*n.x+n.y*n.y;
+	    if(a>0){
+	      float b=n.x*drx+n.y*dry;
+	      float c=drx*drx+dry*dry-rc*rc;
+	      float D=b*b-a*c;
+	      if(D>=0){
+		float h1=(-b+sqrt(D))/a;
+		if(h1>0) ofla=-4;
 	      }
 	    }
 	  }
+	}
 
-	  r+=p.r;
+	if(l==0) r+=p.r;
+	else{ // p contains coordinates relative to DOM center
+	  DOM dom = oms[fla];
+	  r+=(float4)(dom.r[0], dom.r[1], dom.r[2], p.r.w);
 	}
       }
-      else{
-	float xi;
-	if(p.ka>0){
-	  if(p.type==5){
-	    xi=2*sqrt(xrnd(&s))-1;
-	  }
-	  else{
-	    do{ xi=1+p.ka*log(xrnd(&s)); } while (xi<-1);
-	  }
-	  float si=sqrt(1-xi*xi); n=turn(xi, si, n, &s);
-	}
-      }
+      else if(fla>=0) r=p.r+OMR*(float4)(n.xyz, e.ocv);
+      else r=p.r;
     }
     else{
       fla=-1, ofla=-1;
@@ -566,11 +559,14 @@ __kernel void propagate(__private uint num,
       }
     }
 
-    pbuf f; f.r=r, f.n=n; f.q=j; f.i=niw; f.fla=fla, f.ofla=ofla; bf[i]=f;
+    pbuf f; f.r=r, f.n=n; f.q=j; f.i=p.q; f.fla=fla, f.ofla=ofla; bf[i]=f;
   }
   barrier(CLK_GLOBAL_MEM_FENCE);
 
   int ofla=-1;
+  uint niw=0;
+  float TOT=0, SCA;
+
   for(uint i=idx; i<num; TOT==0 && (XINC)){
     int om=-1;
     if(TOT==0){ // initialize photon

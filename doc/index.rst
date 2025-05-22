@@ -148,7 +148,7 @@ these are set as usual within a shell (with an "export" as necessary). Within a 
 
     *example: FWID=9.7*
 
-    sets the width (in degrees) of the 2d gaussian (von-Mieses-Fisher distribution) that determines the light emission profile of flasher LEDs. Set to -1 to simulate isotropic emission profile. If greater than 999.0, the accurate lab-measured profile is simulated. Additionally if greater than 1050.0, the value is taken as azimuthal direction to cable (in degrees, value of 1080 is azimuthal direction along x axis), which is placed as a perfectly absorbing cylinder of radius of 2.3 cm, touching the DOM outer surface. The cable orientation specified here is used to block photons at the emission point (before starting the propagation through ice; to specify cable near receiving DOMs use configuration file dx.dat (which normally should match the value specified here for the same DOM). Unless negative (-1), also a perfectly absorbing harness belt of width of 6.8 cm is simulated, and only 10% of photons exiting the DOM sphere below the equator are retained.
+    sets the width (in degrees) of the 2d gaussian (von-Mieses-Fisher distribution) that determines the light emission profile of flasher LEDs. Set to -1 to simulate an isotropic emission profile; or set to -2 to simulate a linear (in cos(angle to axis)) cone of light. If greater than 999.0, the accurate lab-measured profile is simulated. Additionally if greater than 1050.0, the value is taken as azimuthal direction to cable (in degrees, value of 1080 is azimuthal direction along x axis), which is placed as a perfectly absorbing cylinder of radius of 2.3 cm, touching the DOM outer surface. The cable orientation specified here is used to block photons at the emission point (before starting the propagation through ice; to specify cable near receiving DOMs use configuration file dx.dat (which normally should match the value specified here for the same DOM). When greater than 999.0 also a perfectly absorbing horizontal harness belt of width of 6.8 cm is simulated, and only 10% of photons exiting the DOM sphere below the equator are retained (unless also using option FTLT).
 
   - **FZCR**
 
@@ -156,7 +156,7 @@ these are set as usual within a shell (with an "export" as necessary). Within a 
 
     *example: FZCR=2.6*
 
-    sets the correction to the LED elevation angle (nominally equal to -0.2 degrees for horizontal and 48.1 degrees for tilted flasher LEDs). Unless specified, the value is 0 when simulating the LED profile with a 2d-gaussian. If simulating the more accurate lab-measured LED profile (see description of FWID), the correction value is set to +2.0 degrees for horizontal and -5.0 degrees for tilted flashers. As of mid-2021 the best value used was +2.6 degrees for horizonatal and -6.3 degrees for tilted LEDs.
+    sets the correction to the LED elevation angle (nominally equal to -0.2 degrees for horizontal and 48.1 degrees for tilted flasher LEDs). As of mid-2025 the best value used was +0.2 degrees for horizonatal and -6.1 degrees for tilted LEDs. Default: 0.
 
   - **ELEV**
 
@@ -165,6 +165,14 @@ these are set as usual within a shell (with an "export" as necessary). Within a 
     *example: ELEV=5*
 
     This sets the flasher LED elevation angle directly (instead of as a correction to the nominal values). This still uses the internal sensor LED coordinates for DOM LEDs, possibly to be changed in the future. So, consider this option experimental for now. Default: not used.
+
+  - **FTLT**
+
+    *Flasher om TiLT*
+
+    *example: FTLT="0 0.6 0.8"*
+
+    This sets the flasher DOM tilt direction vector, which nominally is assumed to lie along the z-axis. If this is used but set to anything other than 3 valid float-point numbers, a DOM tilt value from cx.dat file is used instead. Default: (0, 0, 1).
 
   - **OVSZ**
 

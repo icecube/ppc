@@ -244,8 +244,6 @@ void propagate(const unsigned int num, dats * d, datz * ez, hit * hits, const ph
   dats & e = * d;
 
   uint4 s;
-  unsigned int niw=0;
-
   float4 n;
   float4 r;
   ices * w;
@@ -266,13 +264,13 @@ void propagate(const unsigned int num, dats * d, datz * ez, hit * hits, const ph
 
     photon p=pz[pj];
     r=p.r, n.x=p.n.x, n.y=p.n.y, n.z=p.n.z;
-    float l=p.n.w; niw=p.q;
+    float l=p.n.w;
     int fla, ofla;
 
     if(p.type>0){
       fla=p.fla, ofla=p.ofla;
 
-      if(p.type<=4){
+      if(l==0){ // N-fold/cylidrical
 	float xi=xrnd(s);
 	if(p.fldr<0) xi*=2*FPI;
 	else{
@@ -280,16 +278,15 @@ void propagate(const unsigned int num, dats * d, datz * ez, hit * hits, const ph
 	  int s=float2int_rd(xi*r);
 	  xi=(p.fldr+s*360/r)*fcv;
 	}
-	sincosf(xi, &n.y, &n.x);
-
-	float FLZ=0.07735f, FLR=0.119f-0.008f, FLB=0.03396f;
-	if(p.ka>0) r.x=FLR*n.x, r.y=FLR*n.y, r.z=FLZ, r.w=0;
-
+	sincosf(xi, &r.y, &r.x);
 	sincosf(p.up, &n.z, &xi);
-	n.x*=xi; n.y*=xi;
+	n.x=xi*r.x; n.y=xi*r.y;
+      }
 
-	if(p.ka>999.f){
-	  float pf=xrnd(s);
+      if(p.ka!=0){
+	float xi;
+	if(p.ka>999.f){ // lab-measured beam, precise simulation for DOM
+	  xi=xrnd(s);
 
 	  float   s1=0.0191329f, s2=0.0686944f, C1=0.583583f, C2=0.967762f;
 	  switch(p.type){
@@ -297,61 +294,62 @@ void propagate(const unsigned int num, dats * d, datz * ez, hit * hits, const ph
 	  case 2: s1=0.0185603f, s2=0.0624481f, C1=0.553192f, C2=0.974129f; break;
 	  }
 
-	  xi = pf<C1 ? 1-s1*fabsf(grnd(s)) : pf<C2 ? 1+s2*logf(xrnd(s)) : -1.f;
-
+	  xi = xi<C1 ? 1-s1*fabsf(grnd(s)) : xi<C2 ? 1+s2*logf(xrnd(s)) : -1.f;
 	  if(xi<=-1.f) xi=2*sqrtf(xrnd(s))-1;
-	  float si=sqrtf(1-xi*xi); rotate(xi, si, n, s);
 	}
-	else if(p.ka!=0){ // old 2d gaussian
-	  if(p.ka<0) xi=2*xrnd(s)-1;
-	  else do{ xi=1+p.ka*logf(xrnd(s)); } while (xi<-1);
-	  float si=sqrtf(1-xi*xi); rotate(xi, si, n, s);
-	}
+	else if(p.ka>0) do{ xi=1+p.ka*logf(xrnd(s)); } while (xi<-1); // 2d gaussian
+	else if(p.ka==-1) xi=2*xrnd(s)-1; // isotropic
+	else xi=2*sqrtf(xrnd(s))-1; // linear cone
 
-	if(p.ka>0){
-	  float b=r.x*n.x+r.y*n.y+r.z*n.z;
-	  float c=FLZ*FLZ+FLR*FLR-OMR*OMR;
-	  float t=sqrtf(b*b-c)-b;
-	  r.x+=t*n.x, r.y+=t*n.y, r.z+=t*n.z, r.w+=t*e.ocv;
-	  if(fabsf(r.z)<FLB) ofla=-2;
-	  else if(r.z<0) if(xrnd(s)<0.9) ofla=-3;
+	float si=sqrtf(1-xi*xi); rotate(xi, si, n, s);
+      }
 
-	  if(p.ka>1050){
-	    float rc=0.023f;
-	    float dc=OMR+rc;
+      if(p.ka>999.f){
+	const float FLZ=0.07735f, FLR=0.119f-0.008f, FLB=0.03396f;
+	if(l==0) r.x*=FLR, r.y*=FLR, r.z=FLZ, r.w=0;
 
-	    float ph=(p.ka-1080)*fcv;
-	    {
-	      float drx=r.x-dc*cosf(ph);
-	      float dry=r.y-dc*sinf(ph);
-	      float a=n.x*n.x+n.y*n.y;
-	      if(a>0){
-		float b=n.x*drx+n.y*dry;
-		float c=drx*drx+dry*dry-rc*rc;
-		float D=b*b-a*c;
-		if(D>=0){
-		  float h1=(-b+sqrtf(D))/a;
-		  if(h1>0) ofla=-4;
-		}
+	float b=r.x*n.x+r.y*n.y+r.z*n.z;
+	float c=FLZ*FLZ+FLR*FLR-OMR*OMR;
+	float t=sqrtf(b*b-c)-b;
+	r.x+=t*n.x, r.y+=t*n.y, r.z+=t*n.z, r.w+=t*e.ocv;
+
+	if(fabsf(r.z)<FLB) ofla=-2;
+	else if(l==0 && r.z<0 && xrnd(s)<0.9f) ofla=-3;
+
+	if(p.ka>1050.f){
+	  const float rc=0.023f;
+	  const float dc=OMR+rc;
+
+	  float ph=(p.ka-1080.f)*fcv;
+	  {
+	    float drx=r.x-dc*cosf(ph);
+	    float dry=r.y-dc*sinf(ph);
+	    float a=n.x*n.x+n.y*n.y;
+	    if(a>0){
+	      float b=n.x*drx+n.y*dry;
+	      float c=drx*drx+dry*dry-rc*rc;
+	      float D=b*b-a*c;
+	      if(D>=0){
+		float h1=(-b+sqrtf(D))/a;
+		if(h1>0) ofla=-4;
 	      }
 	    }
 	  }
+	}
 
-	  r.x+=p.r.x, r.y+=p.r.y, r.z+=p.r.z, r.w+=p.r.w;
+	if(l==0) r.x+=p.r.x, r.y+=p.r.y, r.z+=p.r.z, r.w+=p.r.w;
+	else{ // p contains coordinates relative to DOM center
+	  const DOM & dom=oms[fla];
+	  r.x+=dom.r[0], r.y+=dom.r[1], r.z+=dom.r[2]; r.w+=p.r.w;
 	}
       }
-      else{
-	float xi;
-	if(p.ka>0){
-	  if(p.type==5){
-	    xi=2*sqrtf(xrnd(s))-1;
-	  }
-	  else{
-	    do{ xi=1+p.ka*logf(xrnd(s)); } while (xi<-1);
-	  }
-	  float si=sqrtf(1-xi*xi); rotate(xi, si, n, s);
-	}
+      else if(fla>=0){
+	const float t=OMR;
+	r.x=t*n.x, r.y=t*n.y, r.z=t*n.z, r.w=t*e.ocv;
+	r.x+=p.r.x, r.y+=p.r.y, r.z+=p.r.z, r.w+=p.r.w;
       }
+
+      else r=p.r;
     }
     else{
       fla=-1, ofla=-1;
@@ -390,7 +388,7 @@ void propagate(const unsigned int num, dats * d, datz * ez, hit * hits, const ph
 	    float xi=cs/beta;
 	    if(xi<=1){
 	      float sx=sqrtf(1-xi*xi);
-	      if(p.type<0) if(sx<xrnd(s)*si) ofla=-3;
+	      if(p.type<0 && sx<xrnd(s)*si) ofla=-3;
 	      cs=xi, si=sx;
 	    }
 	    else ofla=-2;
@@ -400,7 +398,7 @@ void propagate(const unsigned int num, dats * d, datz * ez, hit * hits, const ph
       }
     }
 
-    pbuf f; f.r=r, f.n=n; f.q=j; f.i=niw; f.fla=fla, f.ofla=ofla; bf[i]=f;
+    pbuf f; f.r=r, f.n=n; f.q=j; f.i=p.q; f.fla=fla, f.ofla=ofla; bf[i]=f;
   }
   {
     ez->rs[s.w]=s.x | (unsigned long long) s.y << 32;
@@ -413,8 +411,6 @@ void propagate(const unsigned int num, dats * d, datz * ez, hit * hits, const ph
   dats & e = * d;
 
   uint4 s;
-  unsigned int niw=0;
-
   float4 n;
   float4 r;
   ices * w;
@@ -426,10 +422,10 @@ void propagate(const unsigned int num, dats * d, datz * ez, hit * hits, const ph
     s.z=ez->rm[s.w];
   }
 
-  int old;
+  int ofla=-1, old;
+  unsigned int niw=0;
   float TOT=0, SCA;
 
-  int ofla=-1;
   for(unsigned int i=idx; i<num; TOT==0 && (i+=e.ntot)){
     int om=-1;
     if(TOT==0){ // initialize photon
