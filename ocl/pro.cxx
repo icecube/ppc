@@ -153,8 +153,8 @@ typedef struct{
 float xrnd(uint4 * s){
   ulong sda = (*s).z * (ulong) (*s).x + (*s).y;
   (*s).x = sda; (*s).y = sda >> 32;
-  uint tmp = (*s).x >> 9;
-  return 2.0f-as_float(tmp|0x3f800000);
+  uint tmp = (*s).x >> 9; // (0; 1]
+  return 2.f-as_float(tmp|0x3f800000);
 }
 
 float mrnd(float k, uint4 * s){  // gamma distribution
@@ -242,7 +242,7 @@ float4 turn(float cs, float si, float4 n, uint4 * s){
   float xi = 2*FPI*xrnd(s);
   float2 p = (float2)(cos(xi), sin(xi));
 
-  return my_normalize((float4)(cs*n.xyz+si*(p.x*p1.xyz+p.y*p2.xyz), n.w));
+  return my_normalize(n-(float4)(cs*n.xyz-si*(p.x*p1.xyz+p.y*p2.xyz), 0));
 }
 
 #else
@@ -460,14 +460,14 @@ __kernel void propagate(__private uint num,
 	  case 2: s1=0.0185603f, s2=0.0624481f, C1=0.553192f, C2=0.974129f; break;
 	  }
 
-	  xi = xi<C1 ? 1-s1*fabs(grnd(&s)) : xi<C2 ? 1+s2*log(xrnd(&s)) : -1.f;
-	  if(xi<=-1.f) xi=2*sqrt(xrnd(&s))-1;
+	  xi = xi<C1 ? s1*fabs(grnd(&s)) : xi<C2 ? -s2*log(xrnd(&s)) : 2.f;
+	  if(xi>=2.f) xi=2*(1-sqrt(xrnd(&s)));
 	}
-	else if(p.ka>0) do{ xi=1+p.ka*log(xrnd(&s)); } while (xi<-1); // 2d gaussian
-	else if(p.ka==-1) xi=2*xrnd(&s)-1; // isotropic
-	else xi=2*sqrt(xrnd(&s))-1; // linear cone
+	else if(p.ka>0) xi=min(-p.ka*log(1-(1-xrnd(&s))*(1-exp(-2/p.ka))), 2.f); // 2d gaussian
+	else if(p.ka==-1) xi=2*(1-xrnd(&s)); // isotropic
+	else xi=2*(1-sqrt(xrnd(&s))); // linear cone
 
-	float si=sqrt(1-xi*xi); n=turn(xi, si, n, &s);
+	n=turn(xi, sqrt(xi*(2-xi)), n, &s);
       }
 
       if(p.ka>999.f){
@@ -524,9 +524,8 @@ __kernel void propagate(__private uint num,
 
       if(p.tau>0){ // isotropic delayed emmission
 	r.w-=p.tau*log(xrnd(&s));
-	float cs=xrnd(&s);
-	float si=sqrt(1-cs*cs);
-	n=turn(cs, si, n, &s);
+	float xi=1-xrnd(&s);
+	n=turn(xi, sqrt(xi*(2-xi)), n, &s);
       }
       else{
 	float cs=w->coschr, si=w->sinchr;
@@ -534,8 +533,8 @@ __kernel void propagate(__private uint num,
 	if(p.f<xrnd(&s)){ // cascade particle directions
 	  const float a=0.39f, b=2.61f;
 	  const float I=1-exp(-b*exp2(a));
-	  float cs=max(1-pow(-log(1-xrnd(&s)*I)/b, 1/a), -1.0f);
-	  float si=sqrt(1-cs*cs); n=turn(cs, si, n, &s);
+	  float xi=min(pow(-log(1-xrnd(&s)*I)/b, 1/a), 2.f);
+	  n=turn(xi, sqrt(xi*(2-xi)), n, &s);
 	}
 	else{
 	  float beta=p.beta;
@@ -555,7 +554,7 @@ __kernel void propagate(__private uint num,
 	    else ofla=-2;
 	  }
 	}
-	n=turn(cs, si, n, &s); // sampling cherenkov cone
+	n=turn(1-cs, si, n, &s); // sampling cherenkov cone
       }
     }
 
@@ -903,15 +902,15 @@ __kernel void propagate(__private uint num,
 	  xi=2*xi-1;
 	  if(g!=0){
 	    float ga=(1-g*g)/(1+g*xi);
-	    xi=(1+g*g-ga*ga)/(2*g);
+	    xi=(ga*ga-square(1-g))/(2*g);
 	  }
 	}
 	else{
 	  xi/=sf;
-	  xi=2*pow(xi, gr)-1;
+	  xi=2*(1-pow(xi, gr));
 	}
 
-	if(xi>1) xi=1; else if(xi<-1) xi=-1;
+	if(xi<0) xi=0; else if(xi>2) xi=2;
 
 	aniz az=e.az[J];
 	float k1=az.k1, k2=az.k2;
@@ -926,8 +925,7 @@ __kernel void propagate(__private uint num,
 	  n=my_normalize(n);
 	}
 
-	float si=sqrt(1-xi*xi); // perform scattering
-	n=turn(xi, si, n, &s);
+	n=turn(xi, sqrt(xi*(2-xi)), n, &s); // perform scattering
 
 	if(!hole){ // rotate back into default coordinate system
 	  float n1=( e.azx*n.x+e.azy*n.y)/k1;

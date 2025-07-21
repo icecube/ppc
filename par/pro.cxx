@@ -29,8 +29,8 @@ float xrnd(uint4 & s){
   unsigned long long sda = s.y;
   sda += s.z * (unsigned long long) s.x;
   s.x = sda; s.y = sda >> 32;
-  unsigned int tmp = s.x >> 9;
-  return 2.0f-int_as_float(tmp|0x3f800000);
+  unsigned int tmp = s.x >> 9; // (0; 1]
+  return 2.f-int_as_float(tmp|0x3f800000);
 }
 
 float mrnd(float k, uint4 & s){  // gamma distribution
@@ -85,7 +85,7 @@ void swap(float & x, float & y){
   float a=x; x=y; y=a;
 }
 
-void rotate(float & cs, float & si, float4 & n, uint4 & s){
+void rotate(float cs, float si, float4 & n, uint4 & s){
   float3 p1, p2;
   int i=0;
   {
@@ -120,9 +120,9 @@ void rotate(float & cs, float & si, float4 & n, uint4 & s){
     float xi=2*FPI*xrnd(s);
     sincosf(xi, &p.y, &p.x);
 
-    n.x=cs*n.x+si*(p.x*p1.x+p.y*p2.x);
-    n.y=cs*n.y+si*(p.x*p1.y+p.y*p2.y);
-    n.z=cs*n.z+si*(p.x*p1.z+p.y*p2.z);
+    n.x-=cs*n.x-si*(p.x*p1.x+p.y*p2.x);
+    n.y-=cs*n.y-si*(p.x*p1.y+p.y*p2.y);
+    n.z-=cs*n.z-si*(p.x*p1.z+p.y*p2.z);
 
     my_normalize(n);
     if(i==1) swap(n.x,n.y); else if(i==2) swap(n.x,n.z);
@@ -294,14 +294,14 @@ void propagate(const unsigned int num, dats * d, datz * ez, hit * hits, const ph
 	  case 2: s1=0.0185603f, s2=0.0624481f, C1=0.553192f, C2=0.974129f; break;
 	  }
 
-	  xi = xi<C1 ? 1-s1*fabsf(grnd(s)) : xi<C2 ? 1+s2*logf(xrnd(s)) : -1.f;
-	  if(xi<=-1.f) xi=2*sqrtf(xrnd(s))-1;
+	  xi = xi<C1 ? s1*fabsf(grnd(s)) : xi<C2 ? -s2*logf(xrnd(s)) : 2.f;
+	  if(xi>=2.f) xi=2*(1-sqrtf(xrnd(s)));
 	}
-	else if(p.ka>0) do{ xi=1+p.ka*logf(xrnd(s)); } while (xi<-1); // 2d gaussian
-	else if(p.ka==-1) xi=2*xrnd(s)-1; // isotropic
-	else xi=2*sqrtf(xrnd(s))-1; // linear cone
+	else if(p.ka>0) xi=min(-p.ka*logf(1-(1-xrnd(s))*(1-exp(-2/p.ka))), 2.f); // 2d gaussian
+	else if(p.ka==-1) xi=2*(1-xrnd(s)); // isotropic
+	else xi=2*(1-sqrtf(xrnd(s))); // linear cone
 
-	float si=sqrtf(1-xi*xi); rotate(xi, si, n, s);
+	rotate(xi, sqrtf(xi*(2-xi)), n, s);
       }
 
       if(p.ka>999.f){
@@ -363,9 +363,8 @@ void propagate(const unsigned int num, dats * d, datz * ez, hit * hits, const ph
 
       if(p.tau>0){ // isotropic delayed emmission
 	r.w-=p.tau*logf(xrnd(s));
-	float cs=xrnd(s);
-	float si=sqrtf(1-cs*cs);
-	rotate(cs, si, n, s);
+	float xi=1-xrnd(s);
+	rotate(xi, sqrtf(xi*(2-xi)), n, s);
       }
       else{
 	float cs=w->coschr, si=w->sinchr;
@@ -373,8 +372,8 @@ void propagate(const unsigned int num, dats * d, datz * ez, hit * hits, const ph
 	if(p.f<xrnd(s)){ // cascade particle directions
 	  const float a=0.39f, b=2.61f;
 	  const float I=1-expf(-b*exp2f(a));
-	  float cs=max(1-powf(-logf(1-xrnd(s)*I)/b, 1/a), -1.0f);
-	  float si=sqrtf(1-cs*cs); rotate(cs, si, n, s);
+	  float xi=min(powf(-logf(1-xrnd(s)*I)/b, 1/a), 2.f);
+	  rotate(xi, sqrtf(xi*(2-xi)), n, s);
 	}
 	else{
 	  float beta=p.beta;
@@ -394,7 +393,7 @@ void propagate(const unsigned int num, dats * d, datz * ez, hit * hits, const ph
 	    else ofla=-2;
 	  }
 	}
-	rotate(cs, si, n, s); // sampling cherenkov cone
+	rotate(1-cs, si, n, s); // sampling cherenkov cone
       }
     }
 
@@ -790,15 +789,15 @@ void propagate(const unsigned int num, dats * d, datz * ez, hit * hits, const ph
 	  xi=2*xi-1;
 	  if(g!=0){
 	    float ga=(1-g*g)/(1+g*xi);
-	    xi=(1+g*g-ga*ga)/(2*g);
+	    xi=(ga*ga-square(1-g))/(2*g);
 	  }
 	}
 	else{
 	  xi/=sf;
-	  xi=2*powf(xi, gr)-1;
+	  xi=2*(1-powf(xi, gr));
 	}
 
-	if(xi>1) xi=1; else if(xi<-1) xi=-1;
+	if(xi<0) xi=0; else if(xi>2) xi=2;
 
 	aniz az=e.az[J];
 	float k1=az.k1, k2=az.k2;
@@ -813,8 +812,7 @@ void propagate(const unsigned int num, dats * d, datz * ez, hit * hits, const ph
 	  my_normalize(n);
 	}
 
-	float si=sqrtf(1-xi*xi); // perform scattering
-	rotate(xi, si, n, s);
+	rotate(xi, sqrtf(xi*(2-xi)), n, s); // perform scattering
 
 	if(!hole){ // rotate back into default coordinate system
 	  float n1=( e.azx*n.x+e.azy*n.y)/k1;
