@@ -573,6 +573,35 @@ Configuration files
 
     The block of 12 birefringence parameters p1/p2/p3/p4=A/B/C/D=alpha/beta/gamma/delta is used as described in the New Anisotropy Paper (formulae 1,2) and in Cryosphere (formulae 23,24). See list of references at the end of this page for links to references. Blocks other than the first one can be optionally omitted (disabling anisotropy and hole ice parts of the calculation)
 
+  - **version**
+
+    initially thought of as clsim-compatibility/API flag, this file is now brought into ppc to configure settings that were otherwise set with the ABSM and BFRM environmental variables. You can still used these (ABSM and BFRM) to modify defaults or override configuration set with the "version" file.
+
+    ::
+
+       Ice model compatibility/API flag has been added into
+       the file "version" within each ice model directory:
+
+       1: starting (SPICE Mie)
+       2: added scattering anisotropy
+       3: added layered scattering anisotropy
+       4: added absorption anisotropy (also direct hole ice)
+       5: added birefringence anisotropy
+       6: added birefringence+absorption anisotropy, curved photon paths,
+       precise birefringence layering needed for bfr-v2 in clsim
+       7: added 2d tilt maps (tilt.map and tilt.set)
+
+       10: supports all features of (7), plus sets BFRM=2
+       the only ice model with this version is ftp-v3m
+       the scattering table contains only Mie component
+       (average bfr contribution is treated separately)
+
+       20: supports all features of (7), plus sets ABSM=1 and BFRM=1
+       scattering and absorption fields in icemodel.dat are now full
+       scattering (incl. bfr) and absorption (incl. a_ice) at 400 nm
+
+       add +100 for variable-length rows (unsupported by clsim)
+
   - **cx.dat**
 
     DOM tilt map, each line contains: String#, OM#, nx, ny, nz, uncertainty (degrees). nx, ny, nz are components of the tilt vector that is defined as opposite of PMT axis direction

@@ -208,7 +208,11 @@ struct itype{
   }
 
   int getPMT(V<3> dir, V<3> pos, V<3> tilt, float rnd, float ph = -1.f){
-    if(def){
+    if(beta==-2){ // adopted from code by Jakob Beise
+      const float WOMh = 0.73748; // for WOM inner tube height of 76 cm
+      return rnd-0.5<WOMh*Rr*pos[3]?1:0;
+    }
+    else if(def){
       bool flag;
       if(mas>0){
 	float sum;
@@ -1553,12 +1557,34 @@ struct ini{
       }
 
       float arf=0;
+      float srw=0, srf=1;
+
+      {
+	int version=0;
+	ifstream inFile((icedir+"version").c_str(), ifstream::in);
+	if(!inFile.fail()){
+	  if(!(inFile >> version)){
+	    cerr << "File version found, but is corrupt" << endl;
+	    version=0;
+	  }
+	  else{
+	    cerr << "Adjusting defaults for ice model version = " << version << endl;
+	  }
+	}
+
+	switch(version){
+	case 10: arf=0; srw=0, srf=0; break;
+	case 20: arf=1; srw=1, srf=0; break;
+	}
+      }
+
       {
 	char * absm=getenv("ABSM");
 	if(absm!=NULL){
 	  cerr<<"Ice absorption table: ";
 	  switch(atoi(absm)){
 	  case 0:
+	    arf=0;
 	    cerr<<"MieDUST";
 	    break;
 	  case 1:
@@ -1572,13 +1598,13 @@ struct ini{
 	}
       }
 
-      float srw=0, srf=1;
       {
 	char * bfrm=getenv("BFRM");
 	if(bfrm!=NULL){
 	  cerr<<"BFR scattering subtraction method: ";
 	  switch(atoi(bfrm)){
 	  case 0:
+	    srw=0, srf=1;
 	    cerr<<"DEFAULT";
 	    break;
 	  case 1:
