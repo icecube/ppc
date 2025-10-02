@@ -201,10 +201,36 @@ struct itype{
     rde=area*fr_flat/sum_ave;
   }
 
-  int getPMT(V<3> dir, V<3> pos, V<3> tilt, float rnd, float ph = -1.f){
-    if(beta==-2){ // adopted from code by Jakob Beise
-      const float WOMh = 0.73748; // for WOM inner tube height of 76 cm
-      return rnd-0.5<WOMh*Rr*pos[3]?1:0;
+  int getPMT(V<3> dir, V<3> pos, V<3> tilt, float rnd, float & ht, float ph = -1.f){
+    if(beta==-2){ // model from code and thesis of Jakob Beise
+      const float cn=0.299792458/1.46; // propagation speed in quartz
+      const float abs=3.0/cn; // absorption length in ns
+      const float att=0.678; // attenuation length along cylinder
+      const float cut=0.01; // cut in sigma gamma parameterization
+      const float tau=1.6; // paint re-emission decay time
+      const float h=0.76; // inner tube height in m
+      const float a=h/(1-exp(-h/att)); // effective att. at distance h
+
+      float z=Rr*pos[2]; // z-coordinate from midpoint
+      z*=h/fabs(2*Rz); // parameterizaion only for WOM inner tube height of 76 cm
+
+      int i=rnd-0.5<z/(2*a)?1:0;
+      z=i>0?h/2-z:h/2+z; // distance to detection PMT
+
+      float d=(z/h)*(1-z/(2*a))/(1-h/(2*a)); // simulating acceptance z-dependence by
+      z=-att*log(1-d*(1-exp(-h/att))); // shifting z slightly (up to -1.2 ... +0.4 cm)
+
+      if(z<cut) z=cut; // paramerized only down to 1 cm
+      float x=log(z), dt;
+      float s=exp(((0.0034112*x+0.041727)*x+0.45550)*x-1.9188); // sigma
+      float g=exp(((0.0012658*x+0.017228)*x-0.012750)*x+0.20924); // gamma
+      do{
+	dt=s*sqrt(2*g*pow(1-xrnd(), 1/(1-g))-1); // King function (transit pdf)
+      } while(dt>-abs*log(xrnd())); // rejecting absorbed photons, otherwise tail is too long
+      dt+=z/cn-tau*log(xrnd()); // adding tz (shortest distance) and paint re-emission time
+
+      ht+=dt;
+      return i;
     }
     else if(def){
       bool flag;

@@ -289,7 +289,7 @@ void print(){
       if(it!=types.end()){
 	V<3> dir; dir[0]=nx, dir[1]=ny, dir[2]=nz;
 	V<3> pos; pos[0]=rx, pos[1]=ry, pos[2]=rz;
-	pmt=it->second.getPMT(dir, pos, n.tilt, xrnd(), n.azi);
+	pmt=it->second.getPMT(dir, pos, n.tilt, xrnd(), h.t, n.azi);
 	flag=pmt>=0;
       }
       else flag=false;
